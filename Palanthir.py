@@ -15,15 +15,21 @@ class Palanthir(object):
         self.train_subset = []
         self.test_subset = []
         self.current_version = 0
-        self.transformation_history = [dict(version=self.current_version,transformation='input',result=self.input_data)]
+        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data)]
 
-    def update_attributes(self, step=None, data=None):
+    def update_attributes(self, step=None, data=None, versionOverwrite=None):
         self.observations = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-        self.current_version += 1
+        self.current_version += 1 if versionOverwrite == None else versionOverwrite
         self.transformation_history.append(dict(version=self.current_version,transformation=step,result=data))
+
+    def restore(self, toVersion:int=-1):
+        versionCheckpoint = (self.current_version - 1) if toVersion == -1 else toVersion
+        self.current_version = versionCheckpoint
+        self.output = self.transformation_history[versionCheckpoint].get('result')
+        self.update_attributes(step=f"Restored to version {versionCheckpoint}",data=self.output,versionOverwrite=versionCheckpoint)
 
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
