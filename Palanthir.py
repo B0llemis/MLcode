@@ -16,12 +16,12 @@ class Palanthir(object):
         self.test_subset = []
         self.transformation_history = []
 
-    def update_attributes(self, step=None):
+    def update_attributes(self, step=None, data=None):
         self.observations = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-        self.transformation_history.append(step)
+        self.transformation_history.append(dict(transformation=step,result=data))
 
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
@@ -61,7 +61,7 @@ class Palanthir(object):
                                  index=dataset.index)
         if store:
             self.output = output_df
-            self.update_attributes(step="Performed Principal Component Analysis")
+            self.update_attributes(step="Performed Principal Component Analysis",data=self.output)
         explained_variance = PCA().fit(dataset).explained_variance_ratio_
         cumsum = np.cumsum(explained_variance)
         print(cumsum)
@@ -77,7 +77,7 @@ class Palanthir(object):
         output_df = pd.DataFrame(imputed_data, columns=dataset.columns, index=dataset.index)
         if store:
             self.output[self.features_num] = output_df
-            self.update_attributes(step="Filled nulls")
+            self.update_attributes(step="Filled nulls",data=self.output)
         return output_df
 
     def encode_order(self, store=True):
@@ -88,7 +88,7 @@ class Palanthir(object):
         output_df = pd.DataFrame(encoded_data, columns=dataset.columns, index=dataset.index)
         if store:
             self.output[self.features_cat] = output_df
-            self.update_attributes(step="Encoded order of categorial features")
+            self.update_attributes(step="Encoded order of categorial features",data=self.output)
         return output_df
 
     def make_dummies(self, store=True):
@@ -102,17 +102,23 @@ class Palanthir(object):
         output_df = pd.merge(self.output[self.features_num], dummy_data_df, left_index=True, right_index=True)
         if store == True:
             self.output = output_df
-            self.update_attributes(step="Turned categorical features into dummy variables")
+            self.update_attributes(step="Turned categorical features into dummy variables",data=self.output)
         return output_df
 
-    def scale(self, store=True):
-        """Uses the SKLearn StandardScaler to scall all numerical features of the dataset"""
+    def scale(self, strategy:str, store=True):
+        """Uses the SKLearn StandardScaler or MinMaxScaler to scale all numerical features of the dataset"""
         dataset = self.output[self.features_num]
-        from sklearn.preprocessing import StandardScaler
-        output_df = StandardScaler().fit_transform(dataset)
+        from sklearn.preprocessing import StandardScaler, MinMaxScaler
+        if strategy=="Standard":
+            scaler = StandardScaler()
+        elif strategy=="MinMax":
+            scaler = MinMaxScaler()
+        else:
+            print('Not a proper scaler')
+        output_df = scaler.fit_transform(dataset)
         if store:
             self.output[self.features_num] = output_df
-            self.update_attributes(step="Scaled feature-values")
+            self.update_attributes(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",data=self.output)
         return output_df
 
     def cluster(self, max_k=10, store=True):
