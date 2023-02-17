@@ -96,7 +96,7 @@ class Palanthir(object):
         dataset = self.output[self.features_cat]
         from sklearn.preprocessing import OneHotEncoder
         encoder = OneHotEncoder().fit(dataset)
-        new_column_names = encoder.get_feature_names(dataset.columns)
+        new_column_names = encoder.get_feature_names_out(dataset.columns)
         dummy_data = encoder.transform(dataset).toarray()
         dummy_data_df = pd.DataFrame(dummy_data, columns=[name for name in new_column_names], index=dataset.index)
         output_df = pd.merge(self.output[self.features_num], dummy_data_df, left_index=True, right_index=True)
