@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
 class Palanthir(object):
 
     def __init__(self, input):
@@ -15,14 +14,16 @@ class Palanthir(object):
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
         self.train_subset = []
         self.test_subset = []
-        self.transformation_history = []
+        self.current_version = 0
+        self.transformation_history = [dict(version=self.current_version,transformation='input',result=self.input_data)]
 
     def update_attributes(self, step=None, data=None):
         self.observations = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-        self.transformation_history.append(dict(transformation=step,result=data))
+        self.current_version += 1
+        self.transformation_history.append(dict(version=self.current_version,transformation=step,result=data))
 
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
@@ -58,8 +59,7 @@ class Palanthir(object):
         dataset = self.output[self.features_num]
         from sklearn.decomposition import PCA
         pca_data = PCA(n_components=n_components).fit_transform(dataset)
-        output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],
-                                 index=dataset.index)
+        output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],index=dataset.index)
         if store:
             self.output = output_df
             self.update_attributes(step="Performed Principal Component Analysis",data=self.output)
@@ -137,8 +137,7 @@ class Palanthir(object):
         plt.show()
         print("Best silhouette is obtained with k as: ", best_k)
         if store:
-            self.output["Cluster"] = ["Cluster " + str(i) for i in
-                                      KMeans(n_clusters=best_k, random_state=42).fit_predict(dataset)]
+            self.output["Cluster"] = ["Cluster " + str(i) for i in KMeans(n_clusters=best_k, random_state=42).fit_predict(dataset)]
             self.update_attributes(step="Added Cluster-label as column to dataset")
         return self.output
 
@@ -174,8 +173,7 @@ class Palanthir(object):
         dataset = self.output
         X_train, X_test, Y_train, Y_test = self.random_split(dataset)
 
-        sqrt_scores = np.sqrt(
-            -self.cross_validate(model, X_train, Y_train, score_measure="neg_mean_squared_error", folds=10))
+        sqrt_scores = np.sqrt(-self.cross_validate(model, X_train, Y_train, score_measure="neg_mean_squared_error", folds=10))
         print(
             "RMSE-scores: ", sqrt_scores,
             "RMSE-mean: ", sqrt_scores.mean(),
