@@ -10,8 +10,8 @@ class Palanthir(object):
         self.output = self.input_data.copy(deep=True)
         self.observations = len(self.output)
         self.features = list(self.output)
-        self.features_num = list(self.output.loc[:, self.output.dtypes != np.object])
-        self.features_cat = list(self.output.loc[:, self.output.dtypes == np.object])
+        self.features_num = list(self.output.loc[:, self.output.dtypes != object])
+        self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
         self.train_subset = []
         self.test_subset = []
         self.transformation_history = []
@@ -19,8 +19,8 @@ class Palanthir(object):
     def update_attributes(self, step=None):
         self.observations = len(self.output)
         self.features = list(self.output)
-        self.features_num = list(self.output.loc[:, self.output.dtypes != np.object])
-        self.features_cat = list(self.output.loc[:, self.output.dtypes == np.object])
+        self.features_num = list(self.output.loc[:, self.output.dtypes != object])
+        self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
         self.transformation_history.append(step)
 
     def summarize(self):
@@ -87,7 +87,7 @@ class Palanthir(object):
         encoded_data = OrdinalEncoder().fit_transform(dataset)
         output_df = pd.DataFrame(encoded_data, columns=dataset.columns, index=dataset.index)
         if store:
-            self.output[self.features_cat] = en_data_df
+            self.output[self.features_cat] = output_df
             self.update_attributes(step="Encoded order of categorial features")
         return output_df
 
@@ -111,7 +111,7 @@ class Palanthir(object):
         from sklearn.preprocessing import StandardScaler
         output_df = StandardScaler().fit_transform(dataset)
         if store:
-            self.output[self.features_num] = scaler_df
+            self.output[self.features_num] = output_df
             self.update_attributes(step="Scaled feature-values")
         return output_df
 
