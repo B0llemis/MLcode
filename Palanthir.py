@@ -27,7 +27,10 @@ class Palanthir(object):
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
 
     def update_history(self, step=None, snapshot=None,versionOverwrite=None):
-        self.current_version += 1 if versionOverwrite == None else versionOverwrite
+        if versionOverwrite == None:
+            self.current_version += 1
+        else:
+            self.current_version == versionOverwrite
         self.transformation_history.append(dict(version=self.current_version,transformation=step,result=snapshot))
 
     def update_pipeline(self,pip_step=None,pip_transformer=None):
@@ -37,7 +40,7 @@ class Palanthir(object):
         versionCheckpoint = (self.current_version - 1) if toVersion == -1 else toVersion
         self.current_version = versionCheckpoint
         self.output = self.transformation_history[versionCheckpoint].get('result')
-        self.update_attributes
+        self.update_attributes()
         self.update_history(step=f"Restored to version {versionCheckpoint}",snapshot=self.output,versionOverwrite=versionCheckpoint)
 
     def summarize(self):
