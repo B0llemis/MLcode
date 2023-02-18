@@ -17,8 +17,7 @@ class Palanthir(object):
         self.train_subset = []
         self.test_subset = []
         self.current_version = 0
-        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data)]
-        self.pipeline = [Pipeline([])]
+        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=Pipeline([]))]
 
     def update_attributes(self):
         self.observations = len(self.output)
@@ -26,22 +25,32 @@ class Palanthir(object):
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
 
-    def update_history(self, step=None, snapshot=None,versionOverwrite=None):
-        if versionOverwrite == None:
-            self.current_version += 1
-        else:
-            self.current_version == versionOverwrite
-        self.transformation_history.append(dict(version=self.current_version,transformation=step,result=snapshot))
+    def update_history(self, step=None, snapshot=None,text=None,transformer=None):
+        pipelineSteps = self.transformation_history[-1].get('pipeline').steps + [text,transformer]
+        updatedPipeline = Pipeline(pipelineSteps)
+        self.current_version += 1
+        self.transformation_history.append(
+            dict(
+                version=self.current_version
+                ,transformation=step
+                ,result=snapshot
+                ,pipeline=updatedPipeline
+            )
+        )
 
-    def update_pipeline(self,pip_step=None,pip_transformer=None):
-        self.pipeline.append(self.pipeline[-1].steps.append([pip_step,pip_transformer]))
-
-    def restore(self, toVersion:int=-1):
-        versionCheckpoint = (self.current_version - 1) if toVersion == -1 else toVersion
+    def restore(self, toVersion=None):
+        versionCheckpoint = (self.current_version - 1) if toVersion == None else toVersion
         self.current_version = versionCheckpoint
         self.output = self.transformation_history[versionCheckpoint].get('result')
         self.update_attributes()
-        self.update_history(step=f"Restored to version {versionCheckpoint}",snapshot=self.output,versionOverwrite=versionCheckpoint)
+        self.transformation_history.append(
+            dict(
+                version=self.current_version
+                ,transformation=f"Restored to version {self.current_version}"
+                ,result=self.transformation_history[self.current_version].get('result')
+                ,pipeline=self.transformation_history[self.current_version].get('pipeline')
+            )
+        )
 
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
@@ -76,12 +85,13 @@ class Palanthir(object):
     def PCA(self, n_components=0.80, store=True):
         dataset = self.output[self.features_num]
         from sklearn.decomposition import PCA
-        pca_data = PCA(n_components=n_components).fit_transform(dataset)
+        PCAtransformer = PCA(n_components=n_components).fit(dataset)
+        pca_data = PCAtransformer.transform(dataset)
         output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],index=dataset.index)
         if store:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output)
+            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,text='pca',transformer=PCAtransformer)
         explained_variance = PCA().fit(dataset).explained_variance_ratio_
         cumsum = np.cumsum(explained_variance)
         print(cumsum)
@@ -93,24 +103,26 @@ class Palanthir(object):
         """Uses the SKLearn SimpleImputer to fill out any missing values in the numerical features of the dataset"""
         dataset = self.output[self.features_num]
         from sklearn.impute import SimpleImputer
-        imputed_data = SimpleImputer(strategy=strategy).fit_transform(dataset)
+        imputer = SimpleImputer(strategy=strategy).fit(dataset)
+        imputed_data = imputer.transform(dataset)
         output_df = pd.DataFrame(imputed_data, columns=dataset.columns, index=dataset.index)
         if store:
             self.output[self.features_num] = output_df
             self.update_attributes()
-            self.update_history(step="Filled nulls",snapshot=self.output)
+            self.update_history(step="Filled nulls",snapshot=self.output,text='impute',transformer=imputer)
         return output_df
 
     def encode_order(self, store=True):
         """Uses the SKLearn OrdinalEncoder to order any categorical features of the dataset"""
         dataset = self.output[self.features_cat]
         from sklearn.preprocessing import OrdinalEncoder
-        encoded_data = OrdinalEncoder().fit_transform(dataset)
+        encoder = OrdinalEncoder().fit(dataset)
+        encoded_data = encoder.transform(dataset)
         output_df = pd.DataFrame(encoded_data, columns=dataset.columns, index=dataset.index)
         if store:
             self.output[self.features_cat] = output_df
             self.update_attributes()
-            self.update_history(step="Encoded order of categorial features",snapshot=self.output)
+            self.update_history(step="Encoded order of categorial features",snapshot=self.output,text='ordinal',transformer=encoder)
         return output_df
 
     def make_dummies(self, store=True):
@@ -125,7 +137,7 @@ class Palanthir(object):
         if store == True:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output)
+            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder)
         return output_df
 
     def scale(self, strategy:str, store=True):
@@ -133,16 +145,16 @@ class Palanthir(object):
         dataset = self.output[self.features_num]
         from sklearn.preprocessing import StandardScaler, MinMaxScaler
         if strategy=="Standard":
-            scaler = StandardScaler()
+            scaler = StandardScaler().fit(dataset)
         elif strategy=="MinMax":
-            scaler = MinMaxScaler()
+            scaler = MinMaxScaler().fit(dataset)
         else:
             print('Not a proper scaler')
-        output_df = scaler.fit_transform(dataset)
+        output_df = scaler.transform(dataset)
         if store:
             self.output[self.features_num] = output_df
             self.update_attributes()
-            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output)
+            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,text='scaler',transformer=scaler)
         return output_df
 
     def cluster(self, max_k=10, store=True):
