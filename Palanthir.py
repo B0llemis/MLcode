@@ -17,7 +17,7 @@ class Palanthir(object):
         self.train_subset = []
         self.test_subset = []
         self.current_version = 0
-        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=Pipeline([]))]
+        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
 
     def update_attributes(self):
         self.observations = len(self.output)
@@ -25,9 +25,9 @@ class Palanthir(object):
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
 
-    def update_history(self, step=None, snapshot=None,text=None,transformer=None):
-        pipelineSteps = self.transformation_history[-1].get('pipeline').steps + [text,transformer]
-        updatedPipeline = Pipeline(pipelineSteps)
+    def update_history(self, step=None, snapshot=None,text=None,transformer=None,cols=None):
+        pipelineSteps = self.transformation_history[-1].get('pipeline').get_params().get('transformers') + [text,transformer,cols]
+        updatedPipeline = ColumnTransformer(pipelineSteps)
         self.current_version += 1
         self.transformation_history.append(
             dict(
@@ -137,7 +137,7 @@ class Palanthir(object):
         if store == True:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder)
+            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder,cols=self.features_cat)
         return output_df
 
     def scale(self, strategy:str, store=True):
