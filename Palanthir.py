@@ -82,8 +82,9 @@ class Palanthir(object):
             self.train_subset, self.test_subset = [strat_train_set], [strat_test_set]
         return strat_train_set, strat_test_set
 
-    def PCA(self, n_components=0.80, store=True):
-        dataset = self.output[self.features_num]
+    def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
+        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
         from sklearn.decomposition import PCA
         PCAtransformer = PCA(n_components=n_components).fit(dataset)
         pca_data = PCAtransformer.transform(dataset)
@@ -91,7 +92,7 @@ class Palanthir(object):
         if store:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,text='pca',transformer=PCAtransformer)
+            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,text='pca',transformer=PCAtransformer,cols=columns)
         explained_variance = PCA().fit(dataset).explained_variance_ratio_
         cumsum = np.cumsum(explained_variance)
         print(cumsum)
