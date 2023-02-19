@@ -128,19 +128,21 @@ class Palanthir(object):
             self.update_history(step="Encoded order of categorial features",snapshot=self.output,text='ordinal',transformer=encoder,cols=columns)
         return output_df
 
-    def make_dummies(self, store=True):
+    def make_dummies(self, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn OneHotEncoder to turn categorical features of the dataset into dummy-variables"""
-        dataset = self.output[self.features_cat]
+        columns = [col for col in self.features_cat if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        remain_columns = [col for col in self.output.columns if col not in columns]
+        dataset = self.output[columns]
         from sklearn.preprocessing import OneHotEncoder
         encoder = OneHotEncoder().fit(dataset)
         new_column_names = encoder.get_feature_names_out(dataset.columns)
         dummy_data = encoder.transform(dataset).toarray()
         dummy_data_df = pd.DataFrame(dummy_data, columns=[name for name in new_column_names], index=dataset.index)
-        output_df = pd.merge(self.output[self.features_num], dummy_data_df, left_index=True, right_index=True)
+        output_df = pd.merge(self.output[remain_columns], dummy_data_df, left_index=True, right_index=True)
         if store == True:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder,cols=self.features_cat)
+            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder,cols=columns)
         return output_df
 
     def scale(self, strategy:str, store=True):
