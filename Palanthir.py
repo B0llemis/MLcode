@@ -145,9 +145,10 @@ class Palanthir(object):
             self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder,cols=columns)
         return output_df
 
-    def scale(self, strategy:str, store=True):
+    def scale(self, strategy:str, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn StandardScaler or MinMaxScaler to scale all numerical features of the dataset"""
-        dataset = self.output[self.features_num]
+        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
         from sklearn.preprocessing import StandardScaler, MinMaxScaler
         if strategy=="Standard":
             scaler = StandardScaler().fit(dataset)
@@ -157,9 +158,9 @@ class Palanthir(object):
             print('Not a proper scaler')
         output_df = scaler.transform(dataset)
         if store:
-            self.output[self.features_num] = output_df
+            self.output[columns] = output_df
             self.update_attributes()
-            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,text='scaler',transformer=scaler)
+            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,text='scaler',transformer=scaler,cols=columns)
         return output_df
 
     def cluster(self, max_k=10, store=True):
