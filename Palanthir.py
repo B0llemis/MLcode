@@ -100,7 +100,7 @@ class Palanthir(object):
         plt.show()
         return output_df
 
-    def fill_nulls(self, strategy="median", include_features = [], exclude_features=[], store=True,):
+    def fill_nulls(self, strategy="median", include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn SimpleImputer to fill out any missing values in the numerical features of the dataset"""
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
@@ -114,17 +114,18 @@ class Palanthir(object):
             self.update_history(step="Filled nulls",snapshot=self.output,text='impute',transformer=imputer,cols=columns)
         return output_df
 
-    def encode_order(self, store=True):
+    def encode_order(self, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn OrdinalEncoder to order any categorical features of the dataset"""
-        dataset = self.output[self.features_cat]
+        columns = [col for col in self.features_cat if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
         from sklearn.preprocessing import OrdinalEncoder
         encoder = OrdinalEncoder().fit(dataset)
         encoded_data = encoder.transform(dataset)
         output_df = pd.DataFrame(encoded_data, columns=dataset.columns, index=dataset.index)
         if store:
-            self.output[self.features_cat] = output_df
+            self.output[columns] = output_df
             self.update_attributes()
-            self.update_history(step="Encoded order of categorial features",snapshot=self.output,text='ordinal',transformer=encoder)
+            self.update_history(step="Encoded order of categorial features",snapshot=self.output,text='ordinal',transformer=encoder,cols=columns)
         return output_df
 
     def make_dummies(self, store=True):
