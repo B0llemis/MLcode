@@ -183,25 +183,12 @@ class Palanthir(object):
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output)
         return self.output
 
-    def construct_pipeline(self):
-        """Uses the SKLearn Pipeline and ColumnTransformer to construct a pipeline of transformations on the dataset - including filling out zeroes, scaling and dummifying"""
+    def execute_pipeline(self, version=None):
+        """Uses the SKLearn ColumnTransformer build via previous transformations and applies its transformations to the target dataset"""
         dataset = self.output
-        from sklearn.pipeline import Pipeline
-        from sklearn.compose import ColumnTransformer
-        num_columns = []
-        cat_columns = []
-        num_pipeline = Pipeline([
-            ("imputer", self.fill_nulls()),
-            ("scaler", self.scale()),
-        ])
-        cat_pipeline = Pipeline([
-            ("dummy", self.make_dummies()),
-        ])
-        full_pipeline = ColumnTransformer([
-            ("num", num_pipeline, num_columns),
-            ("cat", cat_pipeline, cat_columns),
-        ])
-        self.output = full_pipeline.fit_transform(dataset)
+        versionCheckpoint = (self.current_version) if version == None else version
+        pipeline = self.transformation_history[versionCheckpoint].get('pipeline')
+        self.output = pipeline.transform(dataset)
         return self.output
 
     def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
