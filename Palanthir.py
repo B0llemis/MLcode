@@ -38,8 +38,8 @@ class Palanthir(object):
             )
         )
 
-    def restore(self, toVersion=None):
-        versionCheckpoint = (self.current_version - 1) if toVersion == None else toVersion
+    def restore(self, version=None):
+        versionCheckpoint = (self.current_version - 1) if version == None else version
         self.current_version = versionCheckpoint
         self.output = self.transformation_history[versionCheckpoint].get('result')
         self.update_attributes()
