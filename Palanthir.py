@@ -1,31 +1,46 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
 class Palanthir(object):
 ## Native attributes
-    def __init__(self, input,target_feature:str=None):
+    def __init__(self, input, target_feature:str=None, init_test_size:(float,None)=None):
         """Initiates a Palanthir-class on-top a Pandas Dataframe. The class-attributes describes the overall structure and composition of the data"""
         self.input_data = input
-        self.output = self.input_data.copy(deep=True)
+        ##When the Palanthir is born with a target variable:
+        if isinstance(target_feature,str):
+            self.Y = [target_feature]
+            self.X = [col for col in self.input_data.columns if col not in self.Y]
+        #...AND is to be split into test-train subsets
+            if isinstance(init_test_size,float):
+                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[self.X],self.input_data[self.Y],test_size=0.2,random_state=42)
+                self.output = self.train_X
+        #...BUT IS NOT to be split into test-train subsets
+            else:
+                self.output = self.input_data.copy(deep=True)[self.X]
+        ##When the Palanthir is NOT born with a target variable:
+        else:
+        # ...BUT IS to be split into test-train subsets
+            if isinstance(init_test_size,float):
+                self.train, self.test = train_test_split(self.input_data,test_size=0.2,random_state=42)
+                self.output = self.train
+        #...AND IS NOT to be split into test-train subsets.
+            else:
+                self.output = self.input_data.copy(deep=True)
         self.size = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-        self.Y = [target_feature]
-        self.X = [col for col in self.output.columns if col not in self.Y]
-        self.train_X = []
-        self.train_Y = []
-        self.test_X = []
-        self.test_Y = []
         self.current_version = 0
         self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
 
 ## Self-update and audit commands
     def declare_target(self,target_feature:str):
         self.Y = [target_feature]
+        self.X = [col for col in self.output.columns if col not in self.Y]
         self.update_attributes()
         return self.Y
 
@@ -34,7 +49,6 @@ class Palanthir(object):
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-        self.X = [col for col in self.output.columns if col not in self.Y]
 
     def update_history(self, step=None, snapshot=None,text=None,transformer=None,cols=None):
         pipelineSteps = self.transformation_history[-1].get('pipeline').get_params().get('transformers') + [(text,transformer,cols)]
@@ -79,9 +93,12 @@ class Palanthir(object):
         dataset_x = x if isinstance(x,pd.core.frame.DataFrame) else self.output.drop(columns=self.Y)
         dataset_y = y if isinstance(y,pd.core.frame.DataFrame) else self.output[self.Y]
         from sklearn.model_selection import train_test_split
-        train_x, train_y, test_x, test_y = train_test_split(dataset_x, dataset_y, test_size=test_size, random_state=42)
-#        if store:
-#            self.train_subset, self.test_subset = [train], [test]
+        train_x, test_x, train_y, test_y = train_test_split(dataset_x, dataset_y, test_size=test_size, random_state=42)
+        if store:
+            self.train_X = train_x
+            self.train_Y = train_y
+            self.test_X = test_x
+            self.test_Y = test_y
         return train_x, train_y, test_x, test_y
 
     def stratified_split(self, cols, store=True):
