@@ -12,15 +12,15 @@ class Palanthir(object):
         self.input_data = input
         ##When the Palanthir is born with a target variable:
         if isinstance(target_feature,str):
-            self.Y = [target_feature]
-            self.X = [col for col in self.input_data.columns if col not in self.Y]
+            self.Y = self.input_data[[target_feature]]
+            self.X = self.input_data[[col for col in self.input_data.columns if col not in self.Y]]
         #...AND is to be split into test-train subsets
             if isinstance(init_test_size,float):
-                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[self.X],self.input_data[self.Y],test_size=0.2,random_state=42)
+                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.X,self.Y,test_size=0.2,random_state=42)
                 self.output = self.train_X
         #...BUT IS NOT to be split into test-train subsets
             else:
-                self.output = self.input_data.copy(deep=True)[self.X]
+                self.output = self.X
         ##When the Palanthir is NOT born with a target variable:
         else:
         # ...BUT IS to be split into test-train subsets
@@ -38,11 +38,6 @@ class Palanthir(object):
         self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
 
 ## Self-update and audit commands
-    def declare_target(self,target_feature:str):
-        self.Y = [target_feature]
-        self.X = [col for col in self.output.columns if col not in self.Y]
-        self.update_attributes()
-        return self.Y
 
     def update_attributes(self):
         self.size = len(self.output)
@@ -76,6 +71,21 @@ class Palanthir(object):
                 ,pipeline=self.transformation_history[self.current_version].get('pipeline')
             )
         )
+
+    def declare_target(self,target_feature:str):
+        self.Y = self.input_data[[target_feature]]
+        self.X = self.input_data[[col for col in self.input_data.columns if col not in self.Y]]
+        self.output = self.X
+        self.update_attributes()
+        self.current_version += 1
+        self.transformation_history.append(
+            dict(
+                version=self.current_version
+                ,transformation=f"Split into X and Y"
+                ,result=self.output
+                ,pipeline=None)
+        )
+        return self.Y
 
 ## Summarization and description commands
     def summarize(self):
