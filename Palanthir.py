@@ -5,25 +5,36 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
 class Palanthir(object):
-
-    def __init__(self, input):
+## Native attributes
+    def __init__(self, input,target_feature:str=None):
         """Initiates a Palanthir-class on-top a Pandas Dataframe. The class-attributes describes the overall structure and composition of the data"""
         self.input_data = input
         self.output = self.input_data.copy(deep=True)
-        self.observations = len(self.output)
+        self.size = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-        self.train_subset = []
-        self.test_subset = []
+        self.Y = [target_feature]
+        self.X = [col for col in self.output.columns if col not in self.Y]
+        self.train_X = []
+        self.train_Y = []
+        self.test_X = []
+        self.test_Y = []
         self.current_version = 0
         self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
 
+## Self-update and audit commands
+    def declare_target(self,target_feature:str):
+        self.Y = [target_feature]
+        self.update_attributes()
+        return self.Y
+
     def update_attributes(self):
-        self.observations = len(self.output)
+        self.size = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
+        self.X = [col for col in self.output.columns if col not in self.Y]
 
     def update_history(self, step=None, snapshot=None,text=None,transformer=None,cols=None):
         pipelineSteps = self.transformation_history[-1].get('pipeline').get_params().get('transformers') + [(text,transformer,cols)]
@@ -52,6 +63,7 @@ class Palanthir(object):
             )
         )
 
+## Summarization and description commands
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
         dataset = self.output
@@ -61,14 +73,16 @@ class Palanthir(object):
             "Missing values: ", dataset.isna().sum()
         )
 
-    def random_split(self, test_size, store=True):
+## Data preprocessing commands
+    def random_split(self, x=None, y=None, test_size=0.2, store=True):
         """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
-        dataset = self.output
+        dataset_x = x if isinstance(x,pd.core.frame.DataFrame) else self.output.drop(columns=self.Y)
+        dataset_y = y if isinstance(y,pd.core.frame.DataFrame) else self.output[self.Y]
         from sklearn.model_selection import train_test_split
-        train, test = train_test_split(dataset, test_size=test_size, random_state=42)
-        if store:
-            self.train_subset, self.test_subset = [train], [test]
-        return train, test
+        train_x, train_y, test_x, test_y = train_test_split(dataset_x, dataset_y, test_size=test_size, random_state=42)
+#        if store:
+#            self.train_subset, self.test_subset = [train], [test]
+        return train_x, train_y, test_x, test_y
 
     def stratified_split(self, cols, store=True):
         """Uses the SKLearn StratigiesShuffleSplit to divide the dataset into stratified training and test subset"""
@@ -82,6 +96,15 @@ class Palanthir(object):
             self.train_subset, self.test_subset = [strat_train_set], [strat_test_set]
         return strat_train_set, strat_test_set
 
+    def execute_pipeline(self, dataset=None, pipeline_version=None):
+        """Uses the SKLearn ColumnTransformer build via previous transformations and apply its transformations to the target dataset"""
+        dataset = self.output if dataset==None else dataset
+        versionCheckpoint = self.current_version if pipeline_version == None else pipeline_version
+        pipeline = self.transformation_history[versionCheckpoint].get('pipeline')
+        self.output = pipeline.transform(dataset)
+        return self.output
+
+## Transformation commands
     def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
@@ -183,14 +206,7 @@ class Palanthir(object):
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output)
         return self.output
 
-    def execute_pipeline(self, dataset=None, pipeline_version=None):
-        """Uses the SKLearn ColumnTransformer build via previous transformations and apply its transformations to the target dataset"""
-        dataset = self.output if dataset==None else dataset
-        versionCheckpoint = self.current_version if pipeline_version == None else pipeline_version
-        pipeline = self.transformation_history[versionCheckpoint].get('pipeline')
-        self.output = pipeline.transform(dataset)
-        return self.output
-
+## Analysis commands
     def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
         """Uses the SKLearn Cross_Val_Score to cross-validate one/several models on the training subset"""
         from sklearn.model_selection import cross_val_score
