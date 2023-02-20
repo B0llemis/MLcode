@@ -26,7 +26,7 @@ class Palanthir(object):
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
 
     def update_history(self, step=None, snapshot=None,text=None,transformer=None,cols=None):
-        pipelineSteps = self.transformation_history[-1].get('pipeline').get_params().get('transformers') + [text,transformer,cols]
+        pipelineSteps = self.transformation_history[-1].get('pipeline').get_params().get('transformers') + [(text,transformer,cols)]
         updatedPipeline = ColumnTransformer(pipelineSteps)
         self.current_version += 1
         self.transformation_history.append(
@@ -183,10 +183,10 @@ class Palanthir(object):
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output)
         return self.output
 
-    def execute_pipeline(self, version=None):
-        """Uses the SKLearn ColumnTransformer build via previous transformations and applies its transformations to the target dataset"""
-        dataset = self.output
-        versionCheckpoint = (self.current_version) if version == None else version
+    def execute_pipeline(self, dataset=None, pipeline_version=None):
+        """Uses the SKLearn ColumnTransformer build via previous transformations and apply its transformations to the target dataset"""
+        dataset = self.output if dataset==None else dataset
+        versionCheckpoint = self.current_version if pipeline_version == None else pipeline_version
         pipeline = self.transformation_history[versionCheckpoint].get('pipeline')
         self.output = pipeline.transform(dataset)
         return self.output
