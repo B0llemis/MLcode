@@ -20,8 +20,8 @@ class Palanthir(object):
                 self.output = self.train_X
         #...BUT IS NOT to be split into test-train subsets
             else:
-                self.Y = self.input_data[Y]
-                self.X = self.input_data[X]
+                self.Y = self.input_data.copy(deep=True)[Y]
+                self.X = self.input_data.copy(deep=True)[X]
                 self.output = self.X
         ##When the Palanthir is NOT born with a target variable:
         else:
@@ -75,17 +75,17 @@ class Palanthir(object):
         )
 
     def declare_target(self,target_feature:str):
+        self.current_version += 1
         self.Y = self.input_data[[target_feature]]
         self.X = self.input_data[[col for col in self.input_data.columns if col not in self.Y]]
         self.output = self.X
         self.update_attributes()
-        self.current_version += 1
         self.transformation_history.append(
             dict(
                 version=self.current_version
                 ,transformation=f"Split into X and Y"
                 ,result=self.output
-                ,pipeline=None)
+                ,pipeline=self.transformation_history[self.current_version-1].get('pipeline'))
         )
         return self.Y
 
