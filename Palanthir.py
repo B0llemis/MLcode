@@ -13,15 +13,15 @@ class Palanthir(object):
         ##When the Palanthir is born with a target variable:
         if isinstance(target_feature,str):
         #...AND is to be split into test-train subsets
-            Y = [target_feature]
-            X = [col for col in self.input_data.columns if col not in Y]
+            self.Y_col = [target_feature]
+            self.X_cols = [col for col in self.input_data.columns if col not in self.Y_col]
             if isinstance(init_test_size,float):
-                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[X],self.input_data[Y],test_size=0.2,random_state=42)
+                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[self.X_cols],self.input_data[self.Y_col],test_size=0.2,random_state=42)
                 self.output = self.train_X
         #...BUT IS NOT to be split into test-train subsets
             else:
-                self.Y = self.input_data.copy(deep=True)[Y]
-                self.X = self.input_data.copy(deep=True)[X]
+                self.Y = self.input_data.copy(deep=True)[self.Y_col]
+                self.X = self.input_data.copy(deep=True)[self.X_cols]
                 self.output = self.X
         ##When the Palanthir is NOT born with a target variable:
         else:
@@ -76,9 +76,21 @@ class Palanthir(object):
 
     def declare_target(self,target_feature:str):
         self.current_version += 1
-        self.Y = self.input_data[[target_feature]]
-        self.X = self.input_data[[col for col in self.input_data.columns if col not in self.Y]]
-        self.output = self.X
+        Y = [target_feature]
+        X = [col for col in self.input_data.columns if col not in Y]
+        ## Palanthir has already been split int test-train subsets:
+        if hasattr(self,'train') or hasattr(self,'test'):
+            self.train_X = self.train[X]
+            self.train_Y = self.train[Y]
+            self.test_X = self.test[X]
+            self.test_Y = self.test[Y]
+            self.output = self.train_X
+            del self.train, self.test
+        ## Palanthir has NOT already been split into test-train subsets:
+        else:
+            self.Y = self.input_data.copy(deep=True)[Y]
+            self.X = self.input_data.copy(deep=True)[X]
+            self.output = self.X
         self.update_attributes()
         self.transformation_history.append(
             dict(
@@ -87,7 +99,7 @@ class Palanthir(object):
                 ,result=self.output
                 ,pipeline=self.transformation_history[self.current_version-1].get('pipeline'))
         )
-        return self.Y
+        return Y
 
 ## Summarization and description commands
     def summarize(self):
@@ -243,13 +255,3 @@ class Palanthir(object):
         return scores
 
     def full_analysis(self, model):
-        """Conducts a full data-analysis pipeline on the dataset, including model training, evaluation and tuning"""
-        dataset = self.output
-        X_train, X_test, Y_train, Y_test = self.random_split(dataset)
-
-        sqrt_scores = np.sqrt(-self.cross_validate(model, X_train, Y_train, score_measure="neg_mean_squared_error", folds=10))
-        print(
-            "RMSE-scores: ", sqrt_scores,
-            "RMSE-mean: ", sqrt_scores.mean(),
-            "RMSE-std: ", sqrt_scores.std()
-        )
