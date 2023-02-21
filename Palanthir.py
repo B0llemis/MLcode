@@ -73,12 +73,12 @@ class Palanthir(object):
                 ,pipeline=self.transformation_history[self.current_version].get('pipeline')
             )
         )
-
+    ##NOTE: DEEPCOPY - Perhaps it makes sense changing the self.output to a dynamic version of train_x. Likewise for the X and Y
     def declare_target(self,target_feature:str):
         self.current_version += 1
         self.Y_col = [target_feature]
         self.X_cols = [col for col in self.input_data.columns if col not in self.Y_col]
-        ## Palanthir has already been split int test-train subsets:
+        ## Palanthir has already been split into test-train subsets:
         if hasattr(self,'train') or hasattr(self,'test'):
             self.train_X = self.train[self.X_cols]
             self.train_Y = self.train[self.Y_col]
@@ -101,30 +101,45 @@ class Palanthir(object):
         )
         return self.Y_col
 
+    ##NOTE: DEEPCOPY - Perhaps it makes sense changing the self.output to a dynamic version of train_x. Likewise for the X and Y
+    def random_split(self, test_size=0.2):
+        """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
+        from sklearn.model_selection import train_test_split
+        self.current_version += 1
+        ## Palanthir is already split into X-Y features:
+        if hasattr(self,'Y') or hasattr(self,'X'):
+            self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.X,self.Y,test_size=test_size,random_state=42)
+            self.output = self.train_X.copy(deep=True)
+        ## Palanthir is NOT already split into X-Y features:
+        else:
+            self.train, self.test = train_test_split(self.input_data,test_size=test_size,random_state=42)
+            self.output = self.train.copy(deep=True)
+        self.update_attributes()
+        self.transformation_history.append(
+            dict(
+                version=self.current_version
+                ,transformation=f"Split into Test and Train"
+                ,result=self.output
+                ,pipeline=self.transformation_history[self.current_version-1].get('pipeline'))
+        )
+        return self.output
+
 ## Summarization and description commands
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
         dataset = self.output
         return print(
             "Info: ", dataset.info(),
+            "\n",
             "Description: ", dataset.describe(),
+            "\n",
             "Missing values: ", dataset.isna().sum()
+
         )
 
 ## Data preprocessing commands
-    def random_split(self, x=None, y=None, test_size=0.2, store=True):
-        """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
-        dataset_x = x if isinstance(x,pd.core.frame.DataFrame) else self.output.drop(columns=self.Y)
-        dataset_y = y if isinstance(y,pd.core.frame.DataFrame) else self.output[self.Y]
-        from sklearn.model_selection import train_test_split
-        train_x, test_x, train_y, test_y = train_test_split(dataset_x, dataset_y, test_size=test_size, random_state=42)
-        if store:
-            self.train_X = train_x
-            self.train_Y = train_y
-            self.test_X = test_x
-            self.test_Y = test_y
-        return train_x, train_y, test_x, test_y
 
+    ## TO BE DEVELOPED
     def stratified_split(self, cols, store=True):
         """Uses the SKLearn StratigiesShuffleSplit to divide the dataset into stratified training and test subset"""
         dataset = self.output
