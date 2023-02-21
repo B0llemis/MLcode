@@ -12,14 +12,16 @@ class Palanthir(object):
         self.input_data = input
         ##When the Palanthir is born with a target variable:
         if isinstance(target_feature,str):
-            self.Y = self.input_data[[target_feature]]
-            self.X = self.input_data[[col for col in self.input_data.columns if col not in self.Y]]
         #...AND is to be split into test-train subsets
+            Y = [target_feature]
+            X = [col for col in self.input_data.columns if col not in Y]
             if isinstance(init_test_size,float):
-                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.X,self.Y,test_size=0.2,random_state=42)
+                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[X],self.input_data[Y],test_size=0.2,random_state=42)
                 self.output = self.train_X
         #...BUT IS NOT to be split into test-train subsets
             else:
+                self.Y = self.input_data[Y]
+                self.X = self.input_data[X]
                 self.output = self.X
         ##When the Palanthir is NOT born with a target variable:
         else:
