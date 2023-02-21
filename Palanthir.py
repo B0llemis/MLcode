@@ -17,18 +17,18 @@ class Palanthir(object):
             self.X_cols = [col for col in self.input_data.columns if col not in self.Y_col]
             if isinstance(init_test_size,float):
                 self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[self.X_cols],self.input_data[self.Y_col],test_size=0.2,random_state=42)
-                self.output = self.train_X
+                self.output = self.train_X.copy(deep=True)
         #...BUT IS NOT to be split into test-train subsets
             else:
                 self.Y = self.input_data.copy(deep=True)[self.Y_col]
                 self.X = self.input_data.copy(deep=True)[self.X_cols]
-                self.output = self.X
+                self.output = self.X.copy(deep=True)
         ##When the Palanthir is NOT born with a target variable:
         else:
         # ...BUT IS to be split into test-train subsets
             if isinstance(init_test_size,float):
                 self.train, self.test = train_test_split(self.input_data,test_size=0.2,random_state=42)
-                self.output = self.train
+                self.output = self.train.copy(deep=True)
         #...AND IS NOT to be split into test-train subsets.
             else:
                 self.output = self.input_data.copy(deep=True)
@@ -84,13 +84,13 @@ class Palanthir(object):
             self.train_Y = self.train[self.Y_col]
             self.test_X = self.test[self.X_cols]
             self.test_Y = self.test[self.Y_col]
-            self.output = self.train_X
+            self.output = self.train_X.copy(deep=True)
             del self.train, self.test
         ## Palanthir has NOT already been split into test-train subsets:
         else:
             self.Y = self.input_data.copy(deep=True)[self.Y_col]
             self.X = self.input_data.copy(deep=True)[self.X_cols]
-            self.output = self.X
+            self.output = self.X.copy(deep=True)
         self.update_attributes()
         self.transformation_history.append(
             dict(
@@ -139,11 +139,18 @@ class Palanthir(object):
 
     def execute_pipeline(self, dataset=None, pipeline_version=None):
         """Uses the SKLearn ColumnTransformer build via previous transformations and apply its transformations to the target dataset"""
-        dataset = self.output if dataset==None else dataset
         versionCheckpoint = self.current_version if pipeline_version == None else pipeline_version
         pipeline = self.transformation_history[versionCheckpoint].get('pipeline')
-        self.output = pipeline.transform(dataset)
-        return self.output
+        ## Check if a dataset is given at function-runtime
+        if isinstance(dataset,pd.core.frame.DataFrame):
+            dataset = dataset
+            fitted_pipeline = pipeline.fit(self.input_data)
+        ## Alternatively check if the Palanthir has already got a X-Y split in its test-train subsets:
+        else:
+            dataset = self.test_X if hasattr(self,'test_X') else self.test
+            fitted_pipeline = pipeline.fit(self.train_X) if hasattr(self,'train_X') else pipeline.fit(self.test)
+        self.transformed_test = fitted_pipeline.transform(dataset)
+        return self.transformed_test
 
 ## Transformation commands
     def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
