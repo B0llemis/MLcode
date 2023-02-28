@@ -210,45 +210,65 @@ class Palanthir(object):
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
         from sklearn.impute import SimpleImputer
-        transformer = SimpleImputer(strategy=strategy).fit(dataset)
-        imputed_data = transformer.transform(dataset)
-        output_df = pd.DataFrame(imputed_data, columns=dataset.columns, index=dataset.index)
+        transformer = SimpleImputer(strategy=strategy)
+        fitted_transformer = transformer.fit(dataset).set_output(transform='pandas')
+        transformed_data = fitted_transformer.transform(dataset)
         if store:
-            self.output[columns] = output_df
+            self.output[columns] = transformed_data
             self.update_attributes()
             self.update_history(step="Filled nulls",snapshot=self.output,transformer=transformer,cols=columns)
-        return output_df
+        return transformed_data
 
     def encode_order(self, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn OrdinalEncoder to order any categorical features of the dataset"""
         columns = [col for col in self.features_cat if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
         from sklearn.preprocessing import OrdinalEncoder
-        transformer = OrdinalEncoder().fit(dataset)
-        encoded_data = transformer.set_output(transform='pandas').transform(dataset)
-        output_df = pd.DataFrame(encoded_data, columns=dataset.columns, index=dataset.index)
+        transformer = OrdinalEncoder()
+        fitted_transformer = transformer.fit(dataset).set_output(transform='pandas')
+        transformed_data = fitted_transformer.transform(dataset)
         if store:
-            self.output[columns] = output_df
+            self.output[columns] = transformed_data
             self.update_attributes()
             self.update_history(step="Encoded order of categorial features",snapshot=self.output,transformer=transformer,cols=columns)
-        return output_df
-
+        return transformed_data
+    
     def make_dummies(self, include_features = [], exclude_features=[], store=True):
-        """Uses the SKLearn OneHotEncoder to turn categorical features of the dataset into dummy-variables"""
+        """Uses a customized version of the SKLearn OneHotEncoder to turn categorical features of the dataset into dummy-variables"""
+        ## Create Custom Transformer for applying OneHotCoding-columns
+        from sklearn.preprocessing import OneHotEncoder
+        from sklearn.base import BaseEstimator,TransformerMixin
+        from sklearn.utils import check_random_state
+        class OneHotter(BaseEstimator,TransformerMixin):
+            def __init__(self, random_state=None):
+                self.random_state = random_state
+
+            def fit(self, X, y=None):
+                self.random_state_ = check_random_state(self.random_state)
+                self.estimator = OneHotEncoder().fit(X)
+                self.new_col_names = self.estimator.get_feature_names_out
+                return self
+
+            def transform(self, X, y=None):
+                X_trans = self.estimator.transform(X).toarray()
+                X_trans_df = pd.DataFrame(data=X_trans, columns=self.new_col_names(), index=X.index)
+                return X_trans_df
+
+            def get_feature_names_out(self):
+                pass
+        
         columns = [col for col in self.features_cat if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         remain_columns = [col for col in self.output.columns if col not in columns]
         dataset = self.output[columns]
-        from sklearn.preprocessing import OneHotEncoder
-        transformer = OneHotEncoder().fit(dataset)
-        new_column_names = transformer.get_feature_names_out(dataset.columns)
-        dummy_data = transformer.transform(dataset).toarray()
-        dummy_data_df = pd.DataFrame(dummy_data, columns=[name for name in new_column_names], index=dataset.index)
-        output_df = pd.merge(self.output[remain_columns], dummy_data_df, left_index=True, right_index=True)
-        if store == True:
-            self.output = output_df
+        transformer = OneHotter()
+        fitted_transformer = transformer.fit(dataset)
+        transformed_data = fitted_transformer.transform(dataset)
+        if store:
+            staged_output = self.output.copy()
+            self.output = pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
             self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,transformer=transformer,cols=columns)
-        return output_df
+        return transformed_data
 
     def scale(self, strategy:str, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn StandardScaler or MinMaxScaler to scale all numerical features of the dataset"""
@@ -256,17 +276,18 @@ class Palanthir(object):
         dataset = self.output[columns]
         from sklearn.preprocessing import StandardScaler, MinMaxScaler
         if strategy=="Standard":
-            transformer = StandardScaler().fit(dataset)
+            transformer = StandardScaler()
         elif strategy=="MinMax":
-            transformer = MinMaxScaler().fit(dataset)
+            transformer = MinMaxScaler()
         else:
             print('Not a proper scaler')
-        output_df = transformer.set_output(transform='pandas').transform(dataset)
+        fitted_transformer = transformer.fit(dataset).set_output(transform='pandas')
+        transformed_data = fitted_transformer.transform(dataset)
         if store:
-            self.output[columns] = output_df
+            self.output[columns] = transformed_data
             self.update_attributes()
             self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=transformer,cols=columns)
-        return output_df
+        return transformed_data
 
     def cluster(self, max_k=10, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn KMeans to cluster the dataset"""
@@ -306,8 +327,7 @@ class Palanthir(object):
                 def get_feature_names_out(self):
                     pass
 
-            bestKMeans = KMeans(n_clusters=best_k, random_state=42).fit(dataset)
-            #self.output["Cluster"] = ["Cluster " + str(i) for i in bestKMeans.predict(dataset)]
+            bestKMeans = KMeans(n_clusters=best_k, n_init='auto', random_state=42).fit(dataset)
             transformer = ClusterIdentifier().fit(dataset)
             self.output = transformer.transform(X=dataset)
             self.update_attributes()
@@ -350,7 +370,7 @@ class Palanthir(object):
 
 
 
-## Analysis command
+## Analysis commands
     def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
         """Uses the SKLearn Cross_Val_Score to cross-validate one/several models on the training subset"""
         from sklearn.model_selection import cross_val_score
