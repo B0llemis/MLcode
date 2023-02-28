@@ -68,7 +68,7 @@ class Palanthir(object):
         ## Wrap transformers into pipeline and pipelines into ColumnTransformer
         list_of_params = [(f'CT-{index}',Pipeline(value.get('transformers')),value.get('columns')) for index,value in enumerate(new_trans_col_pairs)]
         ## Update the Transformation History-dictionary
-        updatedPipeline = ColumnTransformer(list_of_params)
+        updatedPipeline = ColumnTransformer(list_of_params,remainder='passthrough',verbose_feature_names_out=False)
         self.current_version += 1
         self.transformation_history.append(
             dict(
@@ -183,7 +183,7 @@ class Palanthir(object):
         else:
             dataset = self.test_X if hasattr(self,'test_X') else self.test
             fitted_pipeline = pipeline.fit(self.train_X) if hasattr(self,'train_X') else pipeline.fit(self.test)
-        self.transformed_test = fitted_pipeline.transform(dataset)
+        self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
         return self.transformed_test
 
 ## Transformation commands
@@ -302,6 +302,9 @@ class Palanthir(object):
                     X_trans = pd.DataFrame(data=self.estimator.transform(X)).apply(lambda x: x.astype(float))
                     X_trans['cluster'] = X_trans.idxmin(axis=1)
                     return X_trans
+
+                def get_feature_names_out(self):
+                    pass
 
             bestKMeans = KMeans(n_clusters=best_k, random_state=42).fit(dataset)
             #self.output["Cluster"] = ["Cluster " + str(i) for i in bestKMeans.predict(dataset)]
