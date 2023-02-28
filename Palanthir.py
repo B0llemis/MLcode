@@ -225,7 +225,7 @@ class Palanthir(object):
         dataset = self.output[columns]
         from sklearn.preprocessing import OrdinalEncoder
         transformer = OrdinalEncoder().fit(dataset)
-        encoded_data = transformer.transform(dataset)
+        encoded_data = transformer.set_output(transform='pandas').transform(dataset)
         output_df = pd.DataFrame(encoded_data, columns=dataset.columns, index=dataset.index)
         if store:
             self.output[columns] = output_df
@@ -261,7 +261,7 @@ class Palanthir(object):
             transformer = MinMaxScaler().fit(dataset)
         else:
             print('Not a proper scaler')
-        output_df = transformer.transform(dataset)
+        output_df = transformer.set_output(transform='pandas').transform(dataset)
         if store:
             self.output[columns] = output_df
             self.update_attributes()
@@ -341,6 +341,10 @@ class Palanthir(object):
                     x[(x < self.lower_bound[i]) | (x > self.upper_bound[i])] = np.nan
                     X.iloc[:, i] = x
                 return X
+            
+            def get_feature_names_out(self):
+                pass
+            
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
 
