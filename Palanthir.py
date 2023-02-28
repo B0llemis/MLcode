@@ -350,7 +350,7 @@ class Palanthir(object):
 
 
 
-## Analysis commands
+## Analysis command
     def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
         """Uses the SKLearn Cross_Val_Score to cross-validate one/several models on the training subset"""
         from sklearn.model_selection import cross_val_score
