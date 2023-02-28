@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import itertools
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+from sklearn.base import BaseEstimator,TransformerMixin
 
 class Palanthir(object):
 ## Native attributes
@@ -47,9 +49,33 @@ class Palanthir(object):
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
 
-    def update_history(self, step=None, snapshot=None,text=None,transformer=None,cols=None):
-        pipelineSteps = self.transformation_history[-1].get('pipeline').get_params().get('transformers') + [(text,transformer,cols)]
-        updatedPipeline = ColumnTransformer(pipelineSteps)
+    def update_history(self, step=None, snapshot=None,transformer=None,cols=None):
+        current_pipeline = self.transformation_history[-1].get('pipeline').get_params().get('transformers')
+
+        ## Pair together columns and transformers from pipelines used in the ColumnTransformer
+        trans_col_pairs = [(item,tup[2]) for tup in current_pipeline for item in tup[1].steps]
+
+        ## Insert the new step from added transformer
+        counter = '1' if [step[0] for pip in current_pipeline for step in pip[1].steps] == [] else str(max([int(step[0]) for pip in current_pipeline for step in pip[1].steps]) + 1)
+        new_trans = ((counter,transformer),cols)
+        trans_col_pairs += [new_trans]
+
+        ## Explode each transformer and each column for individual trans-on-col-pairs
+        col_trans_explode = [(tup[0],col) for tup in trans_col_pairs for col in tup[1]]
+
+        ## Collect to list all transformers on each column
+        sort_on_cols = sorted(col_trans_explode,key=lambda l:l[1])
+        col_trans_collect = [(key,list(item[0] for item in group)) for key, group in itertools.groupby(sort_on_cols, key=lambda x: x[1])]
+
+        ## Collect to list all columns on each identical list of transformers
+        sort_on_steps = sorted(col_trans_collect,key=lambda x: x[1])
+        new_trans_col_pairs = [{'columns':list(item[0] for item in group),'transformers':key} for key,group in itertools.groupby(sort_on_steps,key=lambda x: x[1])]
+
+        ## Wrap transformers into pipeline and pipelines into ColumnTransformer
+        list_of_params = [(f'CT-{index}',Pipeline(value.get('transformers')),value.get('columns')) for index,value in enumerate(new_trans_col_pairs)]
+
+        ## Update the Transformation History-dictionary
+        updatedPipeline = ColumnTransformer(list_of_params)
         self.current_version += 1
         self.transformation_history.append(
             dict(
@@ -73,7 +99,8 @@ class Palanthir(object):
                 ,pipeline=self.transformation_history[self.current_version].get('pipeline')
             )
         )
-    ##NOTE: DEEPCOPY - Perhaps it makes sense changing the self.output to a dynamic version of train_x. Likewise for the X and Y
+        return self.transformation_history[self.current_version].get('pipeline')
+
     def declare_target(self,target_feature:str):
         self.current_version += 1
         self.Y_col = [target_feature]
@@ -101,7 +128,6 @@ class Palanthir(object):
         )
         return self.Y_col
 
-    ##NOTE: DEEPCOPY - Perhaps it makes sense changing the self.output to a dynamic version of train_x. Likewise for the X and Y
     def random_split(self, test_size=0.2):
         """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
         from sklearn.model_selection import train_test_split
@@ -178,7 +204,7 @@ class Palanthir(object):
         if store:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,text='pca',transformer=PCAtransformer,cols=columns)
+            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,transformer=PCAtransformer,cols=columns)
         explained_variance = PCA().fit(dataset).explained_variance_ratio_
         cumsum = np.cumsum(explained_variance)
         print(cumsum)
@@ -197,7 +223,7 @@ class Palanthir(object):
         if store:
             self.output[columns] = output_df
             self.update_attributes()
-            self.update_history(step="Filled nulls",snapshot=self.output,text='impute',transformer=imputer,cols=columns)
+            self.update_history(step="Filled nulls",snapshot=self.output,transformer=imputer,cols=columns)
         return output_df
 
     def encode_order(self, include_features = [], exclude_features=[], store=True):
@@ -211,7 +237,7 @@ class Palanthir(object):
         if store:
             self.output[columns] = output_df
             self.update_attributes()
-            self.update_history(step="Encoded order of categorial features",snapshot=self.output,text='ordinal',transformer=encoder,cols=columns)
+            self.update_history(step="Encoded order of categorial features",snapshot=self.output,transformer=encoder,cols=columns)
         return output_df
 
     def make_dummies(self, include_features = [], exclude_features=[], store=True):
@@ -228,7 +254,7 @@ class Palanthir(object):
         if store == True:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,text='onehot',transformer=encoder,cols=columns)
+            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,transformer=encoder,cols=columns)
         return output_df
 
     def scale(self, strategy:str, include_features = [], exclude_features=[], store=True):
@@ -246,7 +272,7 @@ class Palanthir(object):
         if store:
             self.output[columns] = output_df
             self.update_attributes()
-            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,text='scaler',transformer=scaler,cols=columns)
+            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=scaler,cols=columns)
         return output_df
 
     def cluster(self, max_k=10, store=True):
@@ -268,6 +294,81 @@ class Palanthir(object):
             self.update_attributes()
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output)
         return self.output
+
+    def clusterV2(self, max_k=10, include_features = [], exclude_features=[], store=True):
+        """Uses the SKLearn KMeans to cluster the dataset"""
+        from sklearn.base import BaseEstimator,TransformerMixin
+        from sklearn.cluster import KMeans
+        from sklearn.utils import check_random_state
+        from sklearn.metrics import silhouette_score
+        from matplotlib import pyplot
+
+        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
+        kmeans_per_k = [KMeans(n_clusters=k, n_init='auto', random_state=42).fit(dataset) for k in range(1, max_k + 1)]
+        silhouettes = [silhouette_score(dataset, model.labels_) for model in kmeans_per_k[1:]]
+        best_k = silhouettes.index(max(silhouettes)) + 2
+        plt.plot(range(2, max_k + 1), silhouettes)
+        plt.xlabel("KMeans")
+        plt.ylabel("Silhouette-score")
+        plt.show()
+        print("Best silhouette is obtained with k as: ", best_k)
+        if store:
+        ## Create Custom Transformer for updating Cluster-label column
+            class ClusterIdentifier(BaseEstimator,TransformerMixin):
+                def __init__(self, Ks=best_k,random_state=None):
+                    self.random_state = random_state
+                    self.Ks = Ks
+
+                def fit(self, X, y=None):
+                    self.random_state_ = check_random_state(self.random_state)
+                    self.estimator = KMeans(n_clusters=self.Ks, n_init='auto', random_state=42).fit(X)
+                    return self
+
+                def transform(self, X, y=None):
+                    X_trans = pd.DataFrame(data=self.estimator.transform(X)).apply(lambda x: x.astype(float))
+                    X_trans['cluster'] = X_trans.idxmin(axis=1)
+                    return X_trans
+
+            bestKMeans = KMeans(n_clusters=best_k, random_state=42).fit(dataset)
+            #self.output["Cluster"] = ["Cluster " + str(i) for i in bestKMeans.predict(dataset)]
+            transformer = ClusterIdentifier().fit(dataset)
+            self.output = transformer.transform(X=dataset)
+            self.update_attributes()
+            self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=columns)
+        return self.output
+
+    def remove_outliers(self, include_features = [], exclude_features = [], factor=1.5):
+        from sklearn.base import BaseEstimator,TransformerMixin
+        class OutlierRemover(BaseEstimator,TransformerMixin):
+            def __init__(self,factor=factor):
+                self.factor = factor
+
+            def outlier_detector(self,X,y=None):
+                X = pd.Series(X).copy()
+                q1 = X.quantile(0.25)
+                q3 = X.quantile(0.75)
+                iqr = q3 - q1
+                self.lower_bound.append(q1 - (self.factor * iqr))
+                self.upper_bound.append(q3 + (self.factor * iqr))
+
+            def fit(self,X,y=None):
+                self.lower_bound = []
+                self.upper_bound = []
+                X.apply(self.outlier_detector)
+                return self
+
+            def transform(self,X,y=None):
+                X = pd.DataFrame(X).copy()
+                for i in range(X.shape[1]):
+                    x = X.iloc[:, i].copy()
+                    x[(x < self.lower_bound[i]) | (x > self.upper_bound[i])] = np.nan
+                    X.iloc[:, i] = x
+                return X
+        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
+
+
 
 ## Analysis commands
     def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
