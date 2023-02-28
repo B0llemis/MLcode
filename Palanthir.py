@@ -143,7 +143,7 @@ class Palanthir(object):
         )
         return self.output
 
-## Summarization and Description commands
+## Summarization and description commands
     def summarize(self):
         """Prints the info, description and any missing value-counts for the class"""
         dataset = self.output
