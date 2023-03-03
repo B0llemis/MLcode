@@ -186,24 +186,7 @@ class Palanthir(object):
         self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
         return self.transformed_test
 
-## Transformation commands
-    def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
-        from sklearn.decomposition import PCA
-        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
-        dataset = self.output[columns]
-        transformer = PCA(n_components=n_components).fit(dataset)
-        pca_data = transformer.transform(dataset)
-        output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],index=dataset.index)
-        if store:
-            self.output = output_df
-            self.update_attributes()
-            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,transformer=transformer,cols=columns)
-        explained_variance = PCA().fit(dataset).explained_variance_ratio_
-        cumsum = np.cumsum(explained_variance)
-        print(cumsum)
-        plt.plot(["PCA" + str(num) for num in range(1, len(cumsum) + 1)], cumsum)
-        plt.show()
-        return self #output_df
+## Feature Engineering commands
 
     def fill_nulls(self, strategy="median", include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn SimpleImputer to fill out any missing values in the numerical features of the dataset"""
@@ -289,6 +272,69 @@ class Palanthir(object):
             self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=transformer,cols=columns)
         return self #transformed_data
     
+    def remove_outliers(self, include_features = [], exclude_features = [], factor=1.5, store=True):
+        from sklearn.base import BaseEstimator,TransformerMixin
+        class OutlierRemover(BaseEstimator,TransformerMixin):
+            def __init__(self,factor=factor):
+                self.factor = factor
+
+            def outlier_detector(self,X,y=None):
+                X = pd.Series(X).copy()
+                q1 = X.quantile(0.25)
+                q3 = X.quantile(0.75)
+                iqr = q3 - q1
+                self.lower_bound.append(q1 - (self.factor * iqr))
+                self.upper_bound.append(q3 + (self.factor * iqr))
+
+            def fit(self,X,y=None):
+                self.lower_bound = []
+                self.upper_bound = []
+                X.apply(self.outlier_detector)
+                return self
+
+            def transform(self,X,y=None):
+                X = pd.DataFrame(X).copy()
+                for i in range(X.shape[1]):
+                    x = X.iloc[:, i].copy()
+                    x[(x < self.lower_bound[i]) | (x > self.upper_bound[i])] = np.nan
+                    X.iloc[:, i] = x
+                return X
+            
+            def get_feature_names_out(self):
+                pass
+            
+        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
+        transformer = OutlierRemover()
+        fitted_transformer = transformer.fit(dataset)
+        transformed_data = fitted_transformer.transform(dataset)
+        if store:
+            self.output[columns] = transformed_data
+            self.update_attributes()
+            self.update_history(step="Removed Outliers",snapshot=self.output,transformer=transformer,cols=columns)
+        return self #transformed_data
+    
+## Dataset Engineering commands (to be developed)
+    
+    def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
+        from sklearn.decomposition import PCA
+        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        dataset = self.output[columns]
+        transformer = PCA(n_components=n_components).fit(dataset)
+        pca_data = transformer.transform(dataset)
+        output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],index=dataset.index)
+        if store:
+            self.output = output_df
+            self.update_attributes()
+            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,transformer=transformer,cols=columns)
+        explained_variance = PCA().fit(dataset).explained_variance_ratio_
+        cumsum = np.cumsum(explained_variance)
+        print(cumsum)
+        plt.plot(["PCA" + str(num) for num in range(1, len(cumsum) + 1)], cumsum)
+        plt.show()
+        return self #output_df
+
+
     def cluster(self, max_k=10, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn KMeans to cluster the dataset"""
         from sklearn.base import BaseEstimator,TransformerMixin
@@ -336,42 +382,6 @@ class Palanthir(object):
             self.update_attributes()
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=columns)
         return self #transformed_data
-
-    def remove_outliers(self, include_features = [], exclude_features = [], factor=1.5):
-        from sklearn.base import BaseEstimator,TransformerMixin
-        class OutlierRemover(BaseEstimator,TransformerMixin):
-            def __init__(self,factor=factor):
-                self.factor = factor
-
-            def outlier_detector(self,X,y=None):
-                X = pd.Series(X).copy()
-                q1 = X.quantile(0.25)
-                q3 = X.quantile(0.75)
-                iqr = q3 - q1
-                self.lower_bound.append(q1 - (self.factor * iqr))
-                self.upper_bound.append(q3 + (self.factor * iqr))
-
-            def fit(self,X,y=None):
-                self.lower_bound = []
-                self.upper_bound = []
-                X.apply(self.outlier_detector)
-                return self
-
-            def transform(self,X,y=None):
-                X = pd.DataFrame(X).copy()
-                for i in range(X.shape[1]):
-                    x = X.iloc[:, i].copy()
-                    x[(x < self.lower_bound[i]) | (x > self.upper_bound[i])] = np.nan
-                    X.iloc[:, i] = x
-                return X
-            
-            def get_feature_names_out(self):
-                pass
-            
-        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
-        dataset = self.output[columns]
-
-
 
 ## Analysis commands
     def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
