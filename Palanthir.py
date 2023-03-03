@@ -19,18 +19,18 @@ class Palanthir(object):
             self.X_cols = [col for col in self.input_data.columns if col not in self.Y_col]
             if isinstance(init_test_size,float):
                 self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[self.X_cols],self.input_data[self.Y_col],test_size=0.2,random_state=42)
-                self.output = self.train_X.copy(deep=True)
+                self.output = self.train_X#.copy(deep=True)
         #...BUT IS NOT to be split into test-train subsets
             else:
                 self.Y = self.input_data.copy(deep=True)[self.Y_col]
                 self.X = self.input_data.copy(deep=True)[self.X_cols]
-                self.output = self.X.copy(deep=True)
+                self.output = self.X#.copy(deep=True)
         ##When the Palanthir is NOT born with a target variable:
         else:
         # ...BUT IS to be split into test-train subsets
             if isinstance(init_test_size,float):
                 self.train, self.test = train_test_split(self.input_data,test_size=0.2,random_state=42)
-                self.output = self.train.copy(deep=True)
+                self.output = self.train#.copy(deep=True)
         #...AND IS NOT to be split into test-train subsets.
             else:
                 self.output = self.input_data.copy(deep=True)
@@ -104,13 +104,13 @@ class Palanthir(object):
             self.train_Y = self.train[self.Y_col]
             self.test_X = self.test[self.X_cols]
             self.test_Y = self.test[self.Y_col]
-            self.output = self.train_X.copy(deep=True)
+            self.output = self.train_X#.copy(deep=True)
             del self.train, self.test
         ## Palanthir has NOT already been split into test-train subsets:
         else:
             self.Y = self.input_data.copy(deep=True)[self.Y_col]
             self.X = self.input_data.copy(deep=True)[self.X_cols]
-            self.output = self.X.copy(deep=True)
+            self.output = self.X#.copy(deep=True)
         self.update_attributes()
         self.transformation_history.append(
             dict(
@@ -119,7 +119,7 @@ class Palanthir(object):
                 ,result=self.output
                 ,pipeline=self.transformation_history[self.current_version-1].get('pipeline'))
         )
-        return self.Y_col
+        return self #self.Y_col
 
     def random_split(self, test_size=0.2):
         """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
@@ -184,7 +184,7 @@ class Palanthir(object):
             dataset = self.test_X if hasattr(self,'test_X') else self.test
             fitted_pipeline = pipeline.fit(self.train_X) if hasattr(self,'train_X') else pipeline.fit(self.test)
         self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
-        return self.transformed_test
+        return self #self.transformed_test
 
 ## Feature Engineering commands
 
@@ -384,10 +384,18 @@ class Palanthir(object):
         return self #transformed_data
 
 ## Analysis commands
-    def cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", folds=10):
+    def kfold_cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", cv=10):
         """Uses the SKLearn Cross_Val_Score to cross-validate one/several models on the training subset"""
         from sklearn.model_selection import cross_val_score
-        scores = cross_val_score(model, x, y, scoring=score_measure, cv=folds)
+        scores = cross_val_score(model, X=x, y=y, scoring=score_measure, cv=cv)
+        return scores
+    
+    def analyze(self, model, x=None, y=None, score_measure="neg_mean_squared_error", cv_folds=10):
+        """Run various analysis using the kfold-cros-validation-technique"""
+        X = self.train_X if x is None else x
+        Y = self.train_Y if y is None else y
+        models = [item.fit(X,Y) for item in model] if isinstance(model,list) else [model]
+        scores = [self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds) for model in models]
         return scores
 
     def full_analysis(self, model):
