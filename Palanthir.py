@@ -203,7 +203,7 @@ class Palanthir(object):
         print(cumsum)
         plt.plot(["PCA" + str(num) for num in range(1, len(cumsum) + 1)], cumsum)
         plt.show()
-        return output_df
+        return self #output_df
 
     def fill_nulls(self, strategy="median", include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn SimpleImputer to fill out any missing values in the numerical features of the dataset"""
@@ -217,7 +217,7 @@ class Palanthir(object):
             self.output[columns] = transformed_data
             self.update_attributes()
             self.update_history(step="Filled nulls",snapshot=self.output,transformer=transformer,cols=columns)
-        return transformed_data
+        return self #transformed_data
 
     def encode_order(self, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn OrdinalEncoder to order any categorical features of the dataset"""
@@ -231,7 +231,7 @@ class Palanthir(object):
             self.output[columns] = transformed_data
             self.update_attributes()
             self.update_history(step="Encoded order of categorial features",snapshot=self.output,transformer=transformer,cols=columns)
-        return transformed_data
+        return self #transformed_data
     
     def make_dummies(self, include_features = [], exclude_features=[], store=True):
         """Uses a customized version of the SKLearn OneHotEncoder to turn categorical features of the dataset into dummy-variables"""
@@ -268,7 +268,7 @@ class Palanthir(object):
             self.output = pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
             self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,transformer=transformer,cols=columns)
-        return transformed_data
+        return self #transformed_data
 
     def scale(self, strategy:str, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn StandardScaler or MinMaxScaler to scale all numerical features of the dataset"""
@@ -287,7 +287,7 @@ class Palanthir(object):
             self.output[columns] = transformed_data
             self.update_attributes()
             self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=transformer,cols=columns)
-        return transformed_data
+        return self #transformed_data
     
     def cluster(self, max_k=10, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn KMeans to cluster the dataset"""
@@ -311,8 +311,6 @@ class Palanthir(object):
             def transform(self, X, y=None):
                 X_trans = self.estimator.predict(X)
                 X['cluster'] = X_trans
-                #X_trans_df = pd.DataFrame(data=X_trans).apply(lambda x: x.astype(float))
-                #X_trans_df['cluster'] = X_trans_df.idxmin(axis=1)
                 return X
 
             def get_feature_names_out(self):
@@ -337,7 +335,7 @@ class Palanthir(object):
             self.output = pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=columns)
-        return transformed_data
+        return self #transformed_data
 
     def remove_outliers(self, include_features = [], exclude_features = [], factor=1.5):
         from sklearn.base import BaseEstimator,TransformerMixin
