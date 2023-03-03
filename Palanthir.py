@@ -161,8 +161,8 @@ class Palanthir(object):
     ## TO BE DEVELOPED
     def stratified_split(self, cols, store=True):
         """Uses the SKLearn StratigiesShuffleSplit to divide the dataset into stratified training and test subset"""
-        dataset = self.output
         from sklearn.model_selection import StratifiedShuffleSplit
+        dataset = self.output
         split = StratifiedShuffleSplit(n_split=1, test_size=0.2, random_state=42)
         for train_index, test_index in split.split(dataset, dataset[cols]):
             strat_train_set = dataset.loc[train_index]
@@ -188,9 +188,9 @@ class Palanthir(object):
 
 ## Transformation commands
     def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
+        from sklearn.decomposition import PCA
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
-        from sklearn.decomposition import PCA
         transformer = PCA(n_components=n_components).fit(dataset)
         pca_data = transformer.transform(dataset)
         output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],index=dataset.index)
@@ -207,9 +207,9 @@ class Palanthir(object):
 
     def fill_nulls(self, strategy="median", include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn SimpleImputer to fill out any missing values in the numerical features of the dataset"""
+        from sklearn.impute import SimpleImputer
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
-        from sklearn.impute import SimpleImputer
         transformer = SimpleImputer(strategy=strategy)
         fitted_transformer = transformer.fit(dataset).set_output(transform='pandas')
         transformed_data = fitted_transformer.transform(dataset)
@@ -221,9 +221,9 @@ class Palanthir(object):
 
     def encode_order(self, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn OrdinalEncoder to order any categorical features of the dataset"""
+        from sklearn.preprocessing import OrdinalEncoder
         columns = [col for col in self.features_cat if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
-        from sklearn.preprocessing import OrdinalEncoder
         transformer = OrdinalEncoder()
         fitted_transformer = transformer.fit(dataset).set_output(transform='pandas')
         transformed_data = fitted_transformer.transform(dataset)
@@ -272,9 +272,9 @@ class Palanthir(object):
 
     def scale(self, strategy:str, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn StandardScaler or MinMaxScaler to scale all numerical features of the dataset"""
+        from sklearn.preprocessing import StandardScaler, MinMaxScaler
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
         dataset = self.output[columns]
-        from sklearn.preprocessing import StandardScaler, MinMaxScaler
         if strategy=="Standard":
             transformer = StandardScaler()
         elif strategy=="MinMax":
@@ -288,7 +288,7 @@ class Palanthir(object):
             self.update_attributes()
             self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=transformer,cols=columns)
         return transformed_data
-
+    
     def cluster(self, max_k=10, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn KMeans to cluster the dataset"""
         from sklearn.base import BaseEstimator,TransformerMixin
@@ -297,7 +297,29 @@ class Palanthir(object):
         from sklearn.metrics import silhouette_score
         from matplotlib import pyplot
 
+        ## Create Custom Transformer for updating Cluster-label column
+        class ClusterIdentifier(BaseEstimator,TransformerMixin):
+            def __init__(self, Ks,random_state=None):
+                self.random_state = random_state
+                self.Ks = Ks
+
+            def fit(self, X, y=None):
+                self.random_state_ = check_random_state(self.random_state)
+                self.estimator = KMeans(n_clusters=self.Ks, n_init='auto', random_state=42).fit(X)
+                return self
+
+            def transform(self, X, y=None):
+                X_trans = self.estimator.predict(X)
+                X['cluster'] = X_trans
+                #X_trans_df = pd.DataFrame(data=X_trans).apply(lambda x: x.astype(float))
+                #X_trans_df['cluster'] = X_trans_df.idxmin(axis=1)
+                return X
+
+            def get_feature_names_out(self):
+                pass
+
         columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
+        remain_columns = [col for col in self.output.columns if col not in columns]
         dataset = self.output[columns]
         kmeans_per_k = [KMeans(n_clusters=k, n_init='auto', random_state=42).fit(dataset) for k in range(1, max_k + 1)]
         silhouettes = [silhouette_score(dataset, model.labels_) for model in kmeans_per_k[1:]]
@@ -307,32 +329,15 @@ class Palanthir(object):
         plt.ylabel("Silhouette-score")
         plt.show()
         print("Best silhouette is obtained with k as: ", best_k)
+        transformer = ClusterIdentifier(Ks=best_k)
+        fitted_transformer = transformer.fit(dataset)
+        transformed_data = fitted_transformer.transform(dataset)
         if store:
-        ## Create Custom Transformer for updating Cluster-label column
-            class ClusterIdentifier(BaseEstimator,TransformerMixin):
-                def __init__(self, Ks=best_k,random_state=None):
-                    self.random_state = random_state
-                    self.Ks = Ks
-
-                def fit(self, X, y=None):
-                    self.random_state_ = check_random_state(self.random_state)
-                    self.estimator = KMeans(n_clusters=self.Ks, n_init='auto', random_state=42).fit(X)
-                    return self
-
-                def transform(self, X, y=None):
-                    X_trans = pd.DataFrame(data=self.estimator.transform(X)).apply(lambda x: x.astype(float))
-                    X_trans['cluster'] = X_trans.idxmin(axis=1)
-                    return X_trans
-
-                def get_feature_names_out(self):
-                    pass
-
-            bestKMeans = KMeans(n_clusters=best_k, n_init='auto', random_state=42).fit(dataset)
-            transformer = ClusterIdentifier().fit(dataset)
-            self.output = transformer.transform(X=dataset)
+            staged_output = self.output.copy()
+            self.output = pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
             self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=columns)
-        return self.output
+        return transformed_data
 
     def remove_outliers(self, include_features = [], exclude_features = [], factor=1.5):
         from sklearn.base import BaseEstimator,TransformerMixin
