@@ -53,7 +53,9 @@ class Palanthir(object):
     
     def update_history(self, step=None, snapshot=None,transformer=None,cols=None):
         ## Get the current pipeline and its steps
-        def restructure_ct(ct_steps,transformer,cols):
+        def restructure_ct(ct,transformer,cols):
+            ## Get transformers from the CT-paramerets
+            ct_steps = ct.get_params().get('transformers')
             ## Pair together columns and transformers from pipelines used in the ColumnTransformer
             trans_col_pairs = [(item,tup[2]) for tup in ct_steps for item in tup[1].steps]
             ## Insert the new step from added transformer
@@ -89,14 +91,12 @@ class Palanthir(object):
             last_step_type = last_step.__class__
             ## If last step IS a ColumnTransformer
             if last_step_type == type(ColumnTransformer([])):
-                ct_steps = last_step.get_params().get('transformers')
-                updated_ct = restructure_ct(ct_steps=ct_steps,transformer=transformer,cols=cols)
+                updated_ct = restructure_ct(ct=last_step,transformer=transformer,cols=cols)
                 pipeline_steps.pop(-1)
                 pipeline_steps.append((f'PL-{no_of_steps}',updated_ct))
             ## If last step IS NOT a ColumnTransformer
             else:
-                ct_steps = []
-                updated_ct = restructure_ct(ct_steps=ct_steps,transformer=transformer,cols=cols)
+                updated_ct = restructure_ct(ct=ColumnTransformer([]),transformer=transformer,cols=cols)
                 pipeline_steps.append((f'PL-{no_of_steps + 1}',updated_ct))
         
         ## Update the Transformation History-dictionary
@@ -110,7 +110,7 @@ class Palanthir(object):
             )
         )
 
-    def update_historyV0(self, step=None, snapshot=None,transformer=None,cols=None):
+    def update_historyFEATURETRANSFORMATIONSONLY(self, step=None, snapshot=None,transformer=None,cols=None):
         current_pipeline = self.transformation_history[-1].get('pipeline').get_params().get('transformers')
         ## Pair together columns and transformers from pipelines used in the ColumnTransformer
         trans_col_pairs = [(item,tup[2]) for tup in current_pipeline for item in tup[1].steps]
