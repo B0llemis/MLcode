@@ -5,7 +5,7 @@ import itertools
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.base import BaseEstimator,TransformerMixin
+from sklearn.base import BaseEstimator,TransformerMixin,clone
 
 class Palanthir(object):
 ## Native attributes
@@ -39,7 +39,9 @@ class Palanthir(object):
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
         self.current_version = 0
-        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
+        self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=Pipeline([]))]
+        #   With update_historyV0 change above to this:     self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
+
 
 ## Self-update and audit commands
 
@@ -48,8 +50,67 @@ class Palanthir(object):
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
-
+    
     def update_history(self, step=None, snapshot=None,transformer=None,cols=None):
+        ## Get the current pipeline and its steps
+        def restructure_ct(ct_steps,transformer,cols):
+            ## Pair together columns and transformers from pipelines used in the ColumnTransformer
+            trans_col_pairs = [(item,tup[2]) for tup in ct_steps for item in tup[1].steps]
+            ## Insert the new step from added transformer
+            step_order = '1' if [step[0] for pip in ct_steps for step in pip[1].steps] == [] else str(max([int(step[0]) for pip in ct_steps for step in pip[1].steps]) + 1)
+            new_trans = ((step_order,transformer),cols)
+            trans_col_pairs += [new_trans]
+            ## Explode each transformer and each column for individual trans-on-col-pairs
+            col_trans_explode = [(tup[0],col) for tup in trans_col_pairs for col in tup[1]]
+            ## Collect to list all transformers on each column
+            sort_on_cols = sorted(col_trans_explode,key=lambda l:l[1])
+            col_trans_collect = [(key,list(item[0] for item in group)) for key, group in itertools.groupby(sort_on_cols, key=lambda x: x[1])]
+            ## Collect to list all columns on each identical list of transformers
+            sort_on_steps = sorted(col_trans_collect,key=lambda l : str(l[1]))
+            ## Wrap transformers into pipeline and pipelines into ColumnTransformer
+            new_trans_col_pairs = [{'columns':list(item[0] for item in group),'transformers':key} for key,group in itertools.groupby(sort_on_steps,key=lambda x: x[1])]
+            ## Creates a new ColumnTransformer around the generated list of transformations
+            list_of_params = [(f'CT-{index}',Pipeline(value.get('transformers')),value.get('columns')) for index,value in enumerate(new_trans_col_pairs)]
+            new_ct = ColumnTransformer(list_of_params,remainder='passthrough',verbose_feature_names_out=False)
+            return new_ct
+        
+        ## Get current pipeline and copy out a version to update    
+        current_pipeline = self.transformation_history[-1].get('pipeline')
+        new_pipeline = clone(current_pipeline)
+        pipeline_steps = new_pipeline.steps
+        no_of_steps = len(pipeline_steps)
+
+        ## CASE A: For adding a new dataset-transformation:
+        if cols is None:
+            pipeline_steps.append((f'PL-{no_of_steps + 1}',transformer))
+        ## CASE B: For adding a new feature-transformation:
+        else:
+            last_step = new_pipeline[-1] if no_of_steps > 0 else None
+            last_step_type = last_step.__class__
+            ## If last step IS a ColumnTransformer
+            if last_step_type == type(ColumnTransformer([])):
+                ct_steps = last_step.get_params().get('transformers')
+                updated_ct = restructure_ct(ct_steps=ct_steps,transformer=transformer,cols=cols)
+                pipeline_steps.pop(-1)
+                pipeline_steps.append((f'PL-{no_of_steps}',updated_ct))
+            ## If last step IS NOT a ColumnTransformer
+            else:
+                ct_steps = []
+                updated_ct = restructure_ct(ct_steps=ct_steps,transformer=transformer,cols=cols)
+                pipeline_steps.append((f'PL-{no_of_steps + 1}',updated_ct))
+        
+        ## Update the Transformation History-dictionary
+        self.current_version += 1
+        self.transformation_history.append(
+            dict(
+                version=self.current_version
+                ,transformation=step
+                ,result=snapshot
+                ,pipeline=new_pipeline
+            )
+        )
+
+    def update_historyV0(self, step=None, snapshot=None,transformer=None,cols=None):
         current_pipeline = self.transformation_history[-1].get('pipeline').get_params().get('transformers')
         ## Pair together columns and transformers from pipelines used in the ColumnTransformer
         trans_col_pairs = [(item,tup[2]) for tup in current_pipeline for item in tup[1].steps]
@@ -316,10 +377,9 @@ class Palanthir(object):
     
 ## Dataset Engineering commands (to be developed)
     
-    def PCA(self, n_components=0.80, include_features = [], exclude_features=[],store=True):
+    def PCA(self, n_components=0.80, store=True):
         from sklearn.decomposition import PCA
-        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
-        dataset = self.output[columns]
+        dataset = self.output
         transformer = PCA(n_components=n_components).fit(dataset)
         pca_data = transformer.transform(dataset)
         output_df = pd.DataFrame(pca_data, columns=["PCA_" + str(col + 1) for col in range(pca_data.shape[1])],index=dataset.index)
@@ -335,7 +395,7 @@ class Palanthir(object):
         return self #output_df
 
 
-    def cluster(self, max_k=10, include_features = [], exclude_features=[], store=True):
+    def cluster(self, max_k=10, store=True):
         """Uses the SKLearn KMeans to cluster the dataset"""
         from sklearn.base import BaseEstimator,TransformerMixin
         from sklearn.cluster import KMeans
@@ -362,9 +422,7 @@ class Palanthir(object):
             def get_feature_names_out(self):
                 pass
 
-        columns = [col for col in self.features_num if col not in exclude_features] if include_features == [] else [col for col in include_features if col not in exclude_features]
-        remain_columns = [col for col in self.output.columns if col not in columns]
-        dataset = self.output[columns]
+        dataset = self.output
         kmeans_per_k = [KMeans(n_clusters=k, n_init='auto', random_state=42).fit(dataset) for k in range(1, max_k + 1)]
         silhouettes = [silhouette_score(dataset, model.labels_) for model in kmeans_per_k[1:]]
         best_k = silhouettes.index(max(silhouettes)) + 2
@@ -378,9 +436,9 @@ class Palanthir(object):
         transformed_data = fitted_transformer.transform(dataset)
         if store:
             staged_output = self.output.copy()
-            self.output = pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
+            self.output = transformed_data #pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
-            self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=columns)
+            self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=None)
         return self #transformed_data
 
 ## Analysis commands
@@ -395,7 +453,7 @@ class Palanthir(object):
         X = self.train_X if x is None else x
         Y = self.train_Y if y is None else y
         models = [item.fit(X,Y) for item in model] if isinstance(model,list) else [model]
-        scores = [self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds) for model in models]
+        scores = [{'model': model, 'scores': self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds)} for model in models]
         return scores
 
     def full_analysis(self, model):
