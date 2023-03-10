@@ -40,7 +40,8 @@ class Palanthir(object):
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
         self.current_version = 0
         self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=Pipeline([]))]
-        #   With update_historyV0 change above to this:     self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
+        self.analysis_results = []
+        #   With update_trans_historyV0 change above to this:     self.transformation_history = [dict(version=0,transformation='input',result=self.input_data,pipeline=ColumnTransformer([]))]
 
 
 ## Self-update and audit commands
@@ -51,7 +52,7 @@ class Palanthir(object):
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
     
-    def update_history(self, step=None, snapshot=None,transformer=None,cols=None):
+    def update_trans_history(self, step=None, snapshot=None,transformer=None,cols=None):
         ## Get the current pipeline and its steps
         def restructure_ct(ct,transformer,cols):
             ## Get transformers from the CT-paramerets
@@ -110,7 +111,7 @@ class Palanthir(object):
             )
         )
 
-    def update_historyFEATURETRANSFORMATIONSONLY(self, step=None, snapshot=None,transformer=None,cols=None):
+    def update_trans_historyFEATURETRANSFORMATIONSONLY(self, step=None, snapshot=None,transformer=None,cols=None):
         current_pipeline = self.transformation_history[-1].get('pipeline').get_params().get('transformers')
         ## Pair together columns and transformers from pipelines used in the ColumnTransformer
         trans_col_pairs = [(item,tup[2]) for tup in current_pipeline for item in tup[1].steps]
@@ -137,6 +138,16 @@ class Palanthir(object):
                 ,transformation=step
                 ,result=snapshot
                 ,pipeline=updatedPipeline
+            )
+        )
+
+    def update_analysis_results(self, model=None, perf_measure = None, scores=None, mean_score = None):
+        self.analysis_results.append(
+            dict(
+                model = model,
+                perf_measure = perf_measure ,
+                scores = scores,
+                mean_score = mean_score
             )
         )
 
@@ -245,7 +256,7 @@ class Palanthir(object):
             dataset = self.test_X if hasattr(self,'test_X') else self.test
             fitted_pipeline = pipeline.fit(self.train_X) if hasattr(self,'train_X') else pipeline.fit(self.test)
         self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
-        return self #self.transformed_test
+        return self
 
 ## Feature Engineering commands
 
@@ -260,8 +271,8 @@ class Palanthir(object):
         if store:
             self.output[columns] = transformed_data
             self.update_attributes()
-            self.update_history(step="Filled nulls",snapshot=self.output,transformer=transformer,cols=columns)
-        return self #transformed_data
+            self.update_trans_history(step="Filled nulls",snapshot=self.output,transformer=transformer,cols=columns)
+        return self
 
     def encode_order(self, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn OrdinalEncoder to order any categorical features of the dataset"""
@@ -274,8 +285,8 @@ class Palanthir(object):
         if store:
             self.output[columns] = transformed_data
             self.update_attributes()
-            self.update_history(step="Encoded order of categorial features",snapshot=self.output,transformer=transformer,cols=columns)
-        return self #transformed_data
+            self.update_trans_history(step="Encoded order of categorial features",snapshot=self.output,transformer=transformer,cols=columns)
+        return self
     
     def make_dummies(self, include_features = [], exclude_features=[], store=True):
         """Uses a customized version of the SKLearn OneHotEncoder to turn categorical features of the dataset into dummy-variables"""
@@ -311,8 +322,8 @@ class Palanthir(object):
             staged_output = self.output.copy()
             self.output = pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
-            self.update_history(step="Turned categorical features into dummy variables",snapshot=self.output,transformer=transformer,cols=columns)
-        return self #transformed_data
+            self.update_trans_history(step="Turned categorical features into dummy variables",snapshot=self.output,transformer=transformer,cols=columns)
+        return self
 
     def scale(self, strategy:str, include_features = [], exclude_features=[], store=True):
         """Uses the SKLearn StandardScaler or MinMaxScaler to scale all numerical features of the dataset"""
@@ -330,8 +341,8 @@ class Palanthir(object):
         if store:
             self.output[columns] = transformed_data
             self.update_attributes()
-            self.update_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=transformer,cols=columns)
-        return self #transformed_data
+            self.update_trans_history(step=f"""Scaled feature-values using {'Standard-scaler' if strategy=='Standard' else 'MinMax-scaler'}""",snapshot=self.output,transformer=transformer,cols=columns)
+        return self
     
     def remove_outliers(self, include_features = [], exclude_features = [], factor=1.5, store=True):
         from sklearn.base import BaseEstimator,TransformerMixin
@@ -372,8 +383,8 @@ class Palanthir(object):
         if store:
             self.output[columns] = transformed_data
             self.update_attributes()
-            self.update_history(step="Removed Outliers",snapshot=self.output,transformer=transformer,cols=columns)
-        return self #transformed_data
+            self.update_trans_history(step="Removed Outliers",snapshot=self.output,transformer=transformer,cols=columns)
+        return self
     
 ## Dataset Engineering commands (to be developed)
     
@@ -386,14 +397,13 @@ class Palanthir(object):
         if store:
             self.output = output_df
             self.update_attributes()
-            self.update_history(step="Performed Principal Component Analysis",snapshot=self.output,transformer=transformer,cols=columns)
+            self.update_trans_history(step="Performed Principal Component Analysis",snapshot=self.output,transformer=transformer,cols=None)
         explained_variance = PCA().fit(dataset).explained_variance_ratio_
         cumsum = np.cumsum(explained_variance)
         print(cumsum)
         plt.plot(["PCA" + str(num) for num in range(1, len(cumsum) + 1)], cumsum)
         plt.show()
-        return self #output_df
-
+        return self
 
     def cluster(self, max_k=10, store=True):
         """Uses the SKLearn KMeans to cluster the dataset"""
@@ -438,8 +448,8 @@ class Palanthir(object):
             staged_output = self.output.copy()
             self.output = transformed_data #pd.merge(staged_output[remain_columns], transformed_data, left_index=True, right_index=True)
             self.update_attributes()
-            self.update_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=None)
-        return self #transformed_data
+            self.update_trans_history(step="Added Cluster-label as column to dataset",snapshot=self.output,transformer=transformer,cols=None)
+        return self
 
 ## Analysis commands
     def kfold_cross_validate(self, model, x, y, score_measure="neg_mean_squared_error", cv=10):
@@ -453,8 +463,12 @@ class Palanthir(object):
         X = self.train_X if x is None else x
         Y = self.train_Y if y is None else y
         models = [item.fit(X,Y) for item in model] if isinstance(model,list) else [model]
-        scores = [{'model': model, 'scores': self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds)} for model in models]
-        return scores
+        scores = [self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds) for model in models]
+        mean_scores = [np.mean(i) for i in scores]
+        #scores = [{'model': model, 'scores': self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds)} for model in models]
+        for m,s,ms in zip(models,scores,mean_scores):
+            self.update_analysis_results(model=m,perf_measure=score_measure,scores=s,mean_score=ms)
+        return self.analysis_results
 
     def full_analysis(self, model):
         """Conducts a full data-analysis pipeline on the dataset, including model training, evaluation and tuning"""
