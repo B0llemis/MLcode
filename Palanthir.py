@@ -18,8 +18,8 @@ class Palanthir(object):
             self.predictor_features = [col for col in self.input_data.columns if col not in self.target_feature]
         ## When the palanthir is born with a train-test split:
         if isinstance(init_test_size,float):
-            self.train, self.test = train_test_split(self.input_data,test_size=0.2,random_state=42)
-            self.output = self.train.copy(deep=True)
+            self.train_index, self.test_index = [split.index for split in train_test_split(self.input_data,test_size=0.2,random_state=42)]
+            self.output = self.input_data.copy(deep=True).iloc[self.train_index]
         else:
             self.output = self.input_data.copy(deep=True)
         self.size = len(self.output)
@@ -159,7 +159,6 @@ class Palanthir(object):
 
     def declare_target(self,target_feature:str):
         self.target_feature = [target_feature]
-        self.predictor_features = [col for col in self.input_data.columns if col not in self.target_feature]
         self.update_attributes()
         return self
 
@@ -167,8 +166,8 @@ class Palanthir(object):
         """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
         from sklearn.model_selection import train_test_split
         self.current_version += 1
-        self.train, self.test = train_test_split(self.input_data,test_size=test_size,random_state=42)
-#        self.output = self.train.copy(deep=True)
+        self.train_index, self.test_index = [split.index for split in train_test_split(self.input_data,test_size=0.2,random_state=42)]
+        self.output = self.output.copy(deep=True).iloc[self.train_index]
         self.update_attributes()
         self.transformation_history.append(
             dict(
@@ -195,17 +194,17 @@ class Palanthir(object):
 ## Data preprocessing commands
 
     ## TO BE DEVELOPED
-    def stratified_split(self, cols, store=True):
-        """Uses the SKLearn StratigiesShuffleSplit to divide the dataset into stratified training and test subset"""
-        from sklearn.model_selection import StratifiedShuffleSplit
-        dataset = self.output
-        split = StratifiedShuffleSplit(n_split=1, test_size=0.2, random_state=42)
-        for train_index, test_index in split.split(dataset, dataset[cols]):
-            strat_train_set = dataset.loc[train_index]
-            strat_test_set = dataset.loc[test_index]
-        if store:
-            self.train_subset, self.test_subset = [strat_train_set], [strat_test_set]
-        return strat_train_set, strat_test_set
+#    def stratified_split(self, cols, store=True):
+#        """Uses the SKLearn StratigiesShuffleSplit to divide the dataset into stratified training and test subset"""
+#        from sklearn.model_selection import StratifiedShuffleSplit
+#        dataset = self.output
+#        split = StratifiedShuffleSplit(n_split=1, test_size=0.2, random_state=42)
+#        for train_index, test_index in split.split(dataset, dataset[cols]):
+#            strat_train_set = dataset.loc[train_index]
+#            strat_test_set = dataset.loc[test_index]
+#        if store:
+#            self.train_subset, self.test_subset = [strat_train_set], [strat_test_set]
+#        return strat_train_set, strat_test_set
 
     def execute_pipeline(self, dataset=None, pipeline_version=None):
         """Uses the SKLearn ColumnTransformer build via previous transformations and apply its transformations to the target dataset"""
@@ -215,10 +214,10 @@ class Palanthir(object):
         if isinstance(dataset,pd.core.frame.DataFrame):
             dataset = dataset
             fitted_pipeline = pipeline.fit(self.input_data)
-        ## Alternatively check if the Palanthir has already got a X-Y split in its test-train subsets:
+        ## Alternatively use the train-test split of the Palanthir:
         else:
-            dataset = self.test
-            fitted_pipeline = pipeline.fit(self.train)
+            dataset = self.input_data.iloc[pal.test_index]
+            fitted_pipeline = pipeline.fit(self.input_data.iloc[self.train_index])
         self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
         return self
 
@@ -424,8 +423,8 @@ class Palanthir(object):
     
     def analyze(self, model, x=None, y=None, score_measure="neg_mean_squared_error", cv_folds=10):
         """Run various analysis using the kfold-cros-validation-technique"""
-        X = self.train_X if x is None else x
-        Y = self.train_Y if y is None else y
+        X = self.output[self.predictor_features] if x is None else x
+        Y = self.output[self.target_feature] if y is None else y
         models = [item.fit(X,Y) for item in model] if isinstance(model,list) else [model]
         scores = [self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds) for model in models]
         mean_scores = [np.mean(i) for i in scores]
