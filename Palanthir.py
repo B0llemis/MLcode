@@ -12,28 +12,16 @@ class Palanthir(object):
     def __init__(self, input, target_feature:str=None, init_test_size:(float,None)=None):
         """Initiates a Palanthir-class on-top a Pandas Dataframe. The class-attributes describes the overall structure and composition of the data"""
         self.input_data = input
-        ##When the Palanthir is born with a target variable:
+        ## When the Palanthir is born with a target variable:
         if isinstance(target_feature,str):
-        #...AND is to be split into test-train subsets
-            self.Y_col = [target_feature]
-            self.X_cols = [col for col in self.input_data.columns if col not in self.Y_col]
-            if isinstance(init_test_size,float):
-                self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.input_data[self.X_cols],self.input_data[self.Y_col],test_size=0.2,random_state=42)
-                self.output = self.train_X#.copy(deep=True)
-        #...BUT IS NOT to be split into test-train subsets
-            else:
-                self.Y = self.input_data.copy(deep=True)[self.Y_col]
-                self.X = self.input_data.copy(deep=True)[self.X_cols]
-                self.output = self.X#.copy(deep=True)
-        ##When the Palanthir is NOT born with a target variable:
+            self.target_feature = [target_feature]
+            self.predictor_features = [col for col in self.input_data.columns if col not in self.target_feature]
+        ## When the palanthir is born with a train-test split:
+        if isinstance(init_test_size,float):
+            self.train, self.test = train_test_split(self.input_data,test_size=0.2,random_state=42)
+            self.output = self.train.copy(deep=True)
         else:
-        # ...BUT IS to be split into test-train subsets
-            if isinstance(init_test_size,float):
-                self.train, self.test = train_test_split(self.input_data,test_size=0.2,random_state=42)
-                self.output = self.train#.copy(deep=True)
-        #...AND IS NOT to be split into test-train subsets.
-            else:
-                self.output = self.input_data.copy(deep=True)
+            self.output = self.input_data.copy(deep=True)
         self.size = len(self.output)
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
@@ -51,6 +39,7 @@ class Palanthir(object):
         self.features = list(self.output)
         self.features_num = list(self.output.loc[:, self.output.dtypes != object])
         self.features_cat = list(self.output.loc[:, self.output.dtypes == object])
+        self.predictor_features = [col for col in self.output.columns if col not in self.target_feature]
     
     def update_trans_history(self, step=None, snapshot=None,transformer=None,cols=None):
         ## Get the current pipeline and its steps
@@ -141,13 +130,15 @@ class Palanthir(object):
             )
         )
 
-    def update_analysis_results(self, model=None, perf_measure = None, scores=None, mean_score = None):
+    def update_analysis_results(self, model=None, perf_measure = None, scores=None, mean_score = None, label=None, feature_importances=None):
         self.analysis_results.append(
             dict(
                 model = model,
                 perf_measure = perf_measure ,
                 scores = scores,
-                mean_score = mean_score
+                mean_score = mean_score,
+                label = label,
+                feature_importances = feature_importances
             )
         )
 
@@ -167,44 +158,17 @@ class Palanthir(object):
         return self.transformation_history[self.current_version].get('pipeline')
 
     def declare_target(self,target_feature:str):
-        self.current_version += 1
-        self.Y_col = [target_feature]
-        self.X_cols = [col for col in self.input_data.columns if col not in self.Y_col]
-        ## Palanthir has already been split into test-train subsets:
-        if hasattr(self,'train') or hasattr(self,'test'):
-            self.train_X = self.train[self.X_cols]
-            self.train_Y = self.train[self.Y_col]
-            self.test_X = self.test[self.X_cols]
-            self.test_Y = self.test[self.Y_col]
-            self.output = self.train_X#.copy(deep=True)
-            del self.train, self.test
-        ## Palanthir has NOT already been split into test-train subsets:
-        else:
-            self.Y = self.input_data.copy(deep=True)[self.Y_col]
-            self.X = self.input_data.copy(deep=True)[self.X_cols]
-            self.output = self.X#.copy(deep=True)
+        self.target_feature = [target_feature]
+        self.predictor_features = [col for col in self.input_data.columns if col not in self.target_feature]
         self.update_attributes()
-        self.transformation_history.append(
-            dict(
-                version=self.current_version
-                ,transformation=f"Split into X and Y"
-                ,result=self.output
-                ,pipeline=self.transformation_history[self.current_version-1].get('pipeline'))
-        )
-        return self #self.Y_col
+        return self
 
     def random_split(self, test_size=0.2):
         """Uses the SKLearn Train_Test_Split to divide the dataset into random training and test subset"""
         from sklearn.model_selection import train_test_split
         self.current_version += 1
-        ## Palanthir is already split into X-Y features:
-        if hasattr(self,'Y') or hasattr(self,'X'):
-            self.train_X, self.test_X, self.train_Y, self.test_Y = train_test_split(self.X,self.Y,test_size=test_size,random_state=42)
-            self.output = self.train_X.copy(deep=True)
-        ## Palanthir is NOT already split into X-Y features:
-        else:
-            self.train, self.test = train_test_split(self.input_data,test_size=test_size,random_state=42)
-            self.output = self.train.copy(deep=True)
+        self.train, self.test = train_test_split(self.input_data,test_size=test_size,random_state=42)
+#        self.output = self.train.copy(deep=True)
         self.update_attributes()
         self.transformation_history.append(
             dict(
@@ -253,8 +217,8 @@ class Palanthir(object):
             fitted_pipeline = pipeline.fit(self.input_data)
         ## Alternatively check if the Palanthir has already got a X-Y split in its test-train subsets:
         else:
-            dataset = self.test_X if hasattr(self,'test_X') else self.test
-            fitted_pipeline = pipeline.fit(self.train_X) if hasattr(self,'train_X') else pipeline.fit(self.test)
+            dataset = self.test
+            fitted_pipeline = pipeline.fit(self.train)
         self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
         return self
 
@@ -465,19 +429,7 @@ class Palanthir(object):
         models = [item.fit(X,Y) for item in model] if isinstance(model,list) else [model]
         scores = [self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds) for model in models]
         mean_scores = [np.mean(i) for i in scores]
-        #scores = [{'model': model, 'scores': self.kfold_cross_validate(model=model,x=X,y=Y,score_measure=score_measure,cv=cv_folds)} for model in models]
-        for m,s,ms in zip(models,scores,mean_scores):
-            self.update_analysis_results(model=m,perf_measure=score_measure,scores=s,mean_score=ms)
+        feature_importances = [zip(model.feature_importances_,X.columns) if hasattr(model,'feature_importances_') else 'NA' for model in models]
+        for m,s,ms,fi in zip(models,scores,mean_scores,feature_importances):
+            self.update_analysis_results(model=m,perf_measure=score_measure,scores=s,mean_score=ms,label=Y.columns,feature_importances=sorted(fi))
         return self.analysis_results
-
-    def full_analysis(self, model):
-        """Conducts a full data-analysis pipeline on the dataset, including model training, evaluation and tuning"""
-        dataset = self.output
-        X_train, X_test, Y_train, Y_test = self.random_split(dataset)
-
-        sqrt_scores = np.sqrt(-self.cross_validate(model, X_train, Y_train, score_measure="neg_mean_squared_error", folds=10))
-        print(
-            "RMSE-scores: ", sqrt_scores,
-            "RMSE-mean: ", sqrt_scores.mean(),
-            "RMSE-std: ", sqrt_scores.std()
-        )
