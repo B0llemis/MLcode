@@ -216,7 +216,7 @@ class Palanthir(object):
             fitted_pipeline = pipeline.fit(self.input_data)
         ## Alternatively use the train-test split of the Palanthir:
         else:
-            dataset = self.input_data.iloc[pal.test_index]
+            dataset = self.input_data.iloc[self.test_index]
             fitted_pipeline = pipeline.fit(self.input_data.iloc[self.train_index])
         self.transformed_test = fitted_pipeline.set_output(transform='pandas').transform(dataset)
         return self
@@ -350,6 +350,35 @@ class Palanthir(object):
         return self
     
 ## Dataset Engineering commands (to be developed)
+
+    def drop_features(self, features_to_drop, store=True):
+        from sklearn.base import BaseEstimator,TransformerMixin
+
+        ## Create Custom Transformer for dropping features
+        class ColumnDropper(BaseEstimator,TransformerMixin):
+            def __init__(self,features):
+                self.features = features
+        
+            def fit(self,X,y=None):
+                return self
+        
+            def transform(self,X,y=None):
+                X = pd.DataFrame(X).copy()
+                return X.drop(columns=self.features)
+        
+            def get_feature_names_out(self):
+                pass
+        
+        dataset = self.output
+        features_to_drop = features_to_drop if type(features_to_drop) == list else [features_to_drop]
+        transformer = ColumnDropper(features=features_to_drop)
+        fitted_transformer = transformer.fit(dataset)
+        transformed_data = fitted_transformer.transform(dataset)
+        if store:
+            self.output = transformed_data
+            self.update_attributes()
+            self.update_trans_history(step=f"Dropped features {features_to_drop}",snapshot=self.output,transformer=transformer,cols=None)
+        return self
     
     def PCA(self, n_components=0.80, store=True):
         from sklearn.decomposition import PCA
@@ -388,6 +417,7 @@ class Palanthir(object):
                 return self
 
             def transform(self, X, y=None):
+                X = pd.DataFrame(X).copy()
                 X_trans = self.estimator.predict(X)
                 X['cluster'] = X_trans
                 return X
